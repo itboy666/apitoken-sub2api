@@ -6,7 +6,7 @@
   "description": "独立的客服与 QQ 群浮窗，包含配置界面、手机布局与深色模式。",
   "author": "APIToken",
   "requires": {
-    "sub2api": ">=2.23.0-apitoken.5 <3.0.0",
+    "sub2api": ">=2.23.0-apitoken.5 <3.0.0-0",
     "recommended_sub2api_version": "2.23.0-apitoken.8",
     "tested_sub2api_versions": [
       "2.23.0-apitoken.5",

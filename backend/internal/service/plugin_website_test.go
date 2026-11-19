@@ -157,6 +157,8 @@ func TestWebsiteReleasePackageInstallsWithPinnedProductionSignature(t *testing.T
 	installed, err := manager.Install(t.Context(), archive, nil)
 	require.NoError(t, err)
 	require.Equal(t, builtInSupportWidgetPluginID, installed.PluginKey)
+	require.True(t, EvaluatePluginCompatibility(installed.Manifest, PluginHostInfo{Version: "2.24.0-apitoken.1"}).Compatible)
+	require.False(t, EvaluatePluginCompatibility(installed.Manifest, PluginHostInfo{Version: "3.0.0-apitoken.1"}).Compatible)
 	require.Equal(t, PluginSignatureTrusted, installed.SignatureStatus)
 	require.Empty(t, installed.BinaryPath)
 	require.Equal(t, PluginStateDisabled, installed.State)

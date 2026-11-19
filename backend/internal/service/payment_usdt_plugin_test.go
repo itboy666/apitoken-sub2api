@@ -190,6 +190,8 @@ func testUSDTSignedPackageLifecycle(t *testing.T, version string) {
 	p, e := m.Install(t.Context(), bytes.NewReader(raw), nil)
 	require.NoError(t, e)
 	require.True(t, p.Manifest.IsPaymentPlugin())
+	require.True(t, EvaluatePluginCompatibility(p.Manifest, PluginHostInfo{Version: "2.24.0-apitoken.1"}).Compatible)
+	require.False(t, EvaluatePluginCompatibility(p.Manifest, PluginHostInfo{Version: "3.0.0-apitoken.1"}).Compatible)
 	require.Equal(t, PluginSignatureTrusted, p.SignatureStatus)
 	cfg := json.RawMessage(`{"wallet_address":"TWwECvk3qmaXWvQd6FrGU5rK6AJ78dyFB9","tronscan_api_key":"fixture-api-key-not-secret"}`)
 	masked, e := m.SaveConfig(t.Context(), p.ID, cfg)

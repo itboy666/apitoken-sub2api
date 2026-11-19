@@ -6,7 +6,7 @@
   "description": "按 1 USDT = 6.5 CNY 收款。独立进程经 TronScan 核验官方 USDT 合约、精确金额及 20 次确认；持久去重后进入原充值账本。",
   "author": "APIToken",
   "requires": {
-    "sub2api": ">=2.23.0-apitoken.6 <3.0.0",
+    "sub2api": ">=2.23.0-apitoken.6 <3.0.0-0",
     "recommended_sub2api_version": "2.23.0-apitoken.8",
     "tested_sub2api_versions": [
       "2.23.0-apitoken.6",

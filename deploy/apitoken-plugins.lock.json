@@ -1,7 +1,7 @@
 {
   "packages": {
-    "extensions/releases/apitoken-support-widget-1.0.6.s2plugin": "1f9a083fa2f1a390a495646fbadb17fc0773e9e17d8e47f0e6a9df0dc1da5489",
-    "extensions/releases/apitoken-usdt-trc20-1.0.2.s2plugin": "4d58bc973cdeed0210d52a41f4088447a078b11663e764af89b560247b40be9b"
+    "extensions/releases/apitoken-support-widget-1.0.6.s2plugin": "bcc6303d28ca0c277bc51137d57fb11fd217146dadbec0eb7e3f2d90b919d3e9",
+    "extensions/releases/apitoken-usdt-trc20-1.0.2.s2plugin": "b9c70984a58e98264e684597366c9e6df98a34c4f0da2c662658d29cd7b0eb25"
   },
   "source_files": {
     "backend/cmd/usdt-trc20-plugin/main.go": "28d2a72bea7f96060f44a252fcc4eb872f5d8b7bb25de70ad4e41093555df236",
@@ -18,7 +18,7 @@
     "extensions/support-widget/README.md": "00a9587a7c4a8da7084d1dad4d3d18d61b45a5b2d4ff59043a92c3d34e6a1203",
     "extensions/support-widget/__tests__/package.test.mjs": "969e4973da7330b4d074362f3553f638c3a5ed3312c74dc643bbbaabab866918",
     "extensions/support-widget/build.py": "51358d1131b46bfdbcb469794d1dbb5db6d2bf74f3fc2e4b277c393af0b7fd02",
-    "extensions/support-widget/manifest.template.json": "ddd187421c78fbeebbe29e030f3eca1b1254f4ef3d9aa8f270d475a33d58f90d",
+    "extensions/support-widget/manifest.template.json": "87045a05e41de2bcc9902bdac8bc04e99b5e2ae8b744476cb5782f23c573891e",
     "extensions/support-widget/public/index.html": "21f2de66bb4d6a061239e4afa5c8cca50cb7b97a1e6a0a1996c483e08c38b9a4",
     "extensions/support-widget/public/widget.css": "888516ac8d5cde8dc940d8d3b573cf8ca42f52efd93ffd14b2df8c182548ae72",
     "extensions/support-widget/public/widget.js": "49e6854d6249b1343a6bfd26268e8047f92ee72be6cf753e956a0f37b8e5c0e7",
@@ -29,7 +29,7 @@
     "extensions/usdt-trc20/.gitignore": "b7b5a9a5bdb3a876455f7320f221592c77a378fac89c0283dc6ebe19b124bf43",
     "extensions/usdt-trc20/README.md": "f7e68d613c9cf30e9b798b88d34b4126eca82a3d9392f94ec639c5d4ccb7b197",
     "extensions/usdt-trc20/build.py": "5d427e821831332ce7bfa385f15bcfcc23675351a29efe6cc415f5b9c2383275",
-    "extensions/usdt-trc20/manifest.template.json": "81a0e2362ec7a47f548015e1efb004a8f4739e9cf4221b5445700110a2923609",
+    "extensions/usdt-trc20/manifest.template.json": "4e3c00a9567dfe933e4032cb2dc2c2b4a18431d865e0282005664b199cd84d27",
     "extensions/usdt-trc20/ui/config.js": "42dfd750f6a4cf8aefa0d7310ab2ead75d45fce6df50e6659e25db224230bef3",
     "extensions/usdt-trc20/ui/index.html": "482d95bc3fc673fd0e65ae600df58dce93f1e0e677caca0944891562c8fae0ac",
     "extensions/usdt-trc20/ui/style.css": "bf731b34a4c43f6869ed4503d5016f6c48bf927831be76673a85e3315046d0c4"
