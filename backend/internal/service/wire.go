@@ -225,7 +225,7 @@ func ProvideOpenAITokenProvider(
 }
 
 // ProvidePluginManager preserves account-directory wiring when regenerating Wire.
-func ProvidePluginManager(repo PluginRepository, encryptor SecretEncryptor, cfg *config.Config, hostInfo PluginHostInfo, kvStore PluginKVStore, gateway *OpenAIGatewayService) *PluginManager {
+func ProvidePluginManager(repo PluginRepository, encryptor PluginConfigEncryptor, cfg *config.Config, hostInfo PluginHostInfo, kvStore PluginKVStore, gateway *OpenAIGatewayService) *PluginManager {
 	manager := NewPluginManager(repo, encryptor, cfg, hostInfo, kvStore)
 	manager.SetAccountDirectory(gateway)
 	return manager
@@ -1238,8 +1238,15 @@ func ProvideUserPlatformQuotaUsageFlusher(cfg *config.Config, cache BillingCache
 
 // ProvidePaymentConfigService wraps NewPaymentConfigService to accept the named
 // payment.EncryptionKey type instead of raw []byte, avoiding Wire ambiguity.
-func ProvidePaymentConfigService(entClient *dbent.Client, settingRepo SettingRepository, key payment.EncryptionKey) *PaymentConfigService {
-	return NewPaymentConfigService(entClient, settingRepo, []byte(key))
+func ProvidePaymentConfigService(entClient *dbent.Client, settingRepo SettingRepository, key payment.EncryptionKey, pluginManager *PluginManager) *PaymentConfigService {
+	svc := NewPaymentConfigService(entClient, settingRepo, []byte(key))
+	svc.pluginManager = pluginManager
+	if pluginManager != nil {
+		pluginManager.operationMu.Lock()
+		pluginManager.paymentConfigGuard = svc.guardUSDTWalletChange
+		pluginManager.operationMu.Unlock()
+	}
+	return svc
 }
 
 // ProvideBalanceNotifyService creates BalanceNotifyService

@@ -15,10 +15,10 @@
             class="mt-3 flex flex-wrap gap-2 text-xs text-gray-600 dark:text-gray-300"
           >
             <span class="rounded bg-gray-100 px-2 py-1 dark:bg-dark-700">{{
-              t("admin.plugins.onlyOpenAI")
+              t("admin.plugins.supportedCapabilities")
             }}</span>
             <span class="rounded bg-gray-100 px-2 py-1 dark:bg-dark-700">{{
-              t("admin.plugins.noAccountCoupling")
+              t("admin.plugins.independentPackages")
             }}</span>
           </div>
         </div>
@@ -211,7 +211,7 @@
               </p>
             </div>
 
-            <div class="md:col-span-2">
+            <div v-if="!isWebsitePlugin(plugin) && !isPaymentPlugin(plugin)" class="md:col-span-2">
               <label
                 class="flex items-center justify-between gap-4 text-xs font-medium text-gray-600 dark:text-gray-300"
               >
@@ -229,7 +229,7 @@
                 max="100"
                 step="1"
                 class="mt-2 w-full accent-primary-600"
-                :disabled="hasEnabledBinding(plugin)"
+                :disabled="isPluginEnabled(plugin)"
                 @input="setRollout(plugin.id, $event)"
               />
             </div>
@@ -248,7 +248,7 @@
               {{ t("admin.plugins.test") }}
             </button>
             <button
-              v-if="hasEnabledBinding(plugin)"
+              v-if="isPluginEnabled(plugin)"
               type="button"
               class="btn btn-secondary btn-sm"
               :disabled="busyID === plugin.id"
@@ -274,7 +274,7 @@
             <button
               type="button"
               class="btn btn-danger btn-sm"
-              :disabled="busyID === plugin.id || hasEnabledBinding(plugin)"
+              :disabled="busyID === plugin.id || isPluginEnabled(plugin)"
               @click="uninstallPlugin(plugin)"
             >
               <Icon name="trash" size="sm" />
@@ -327,13 +327,22 @@
         </div>
       </BaseDialog>
 
+      <ConfirmDialog
+        :show="confirmation.show"
+        :title="t('admin.plugins.title')"
+        :message="confirmation.message"
+        :danger="confirmation.danger"
+        @confirm="resolveConfirmation(true)"
+        @cancel="resolveConfirmation(false)"
+      />
+
       <TotpStepUpDialog :controller="pluginStepUp" />
     </div>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from "vue";
+import { onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   adminAPI,
@@ -343,6 +352,7 @@ import {
 import { useAppStore } from "@/stores";
 import AppLayout from "@/components/layout/AppLayout.vue";
 import BaseDialog from "@/components/common/BaseDialog.vue";
+import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import Icon from "@/components/icons/Icon.vue";
 import TotpStepUpDialog from "@/components/auth/TotpStepUpDialog.vue";
 import {
@@ -363,7 +373,7 @@ interface PluginBridgeMessage {
   message?: unknown;
 }
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const appStore = useAppStore();
 const pluginStepUp = useStepUp();
 const plugins = ref<PluginInstallation[]>([]);
@@ -379,7 +389,18 @@ const uiLoading = ref(false);
 const uiError = ref("");
 const iframeHeight = ref(640);
 const pluginFrameLoaded = ref(false);
-const pendingBridgeRequests = new Map<string, number>();
+const confirmation = reactive({ show: false, message: "", danger: false });
+let confirmationResolver: ((accepted: boolean) => void) | null = null;
+interface PendingBridgeRequest {
+  requestID: string;
+  type: string;
+  sessionVersion: number;
+  pluginID: number;
+  bridgeToken: string;
+  source: Window;
+  timeout: number;
+}
+const pendingBridgeRequests = new Map<string, PendingBridgeRequest>();
 let uiSessionVersion = 0;
 
 function errorMessage(error: unknown): string {
@@ -402,6 +423,23 @@ function reportSensitiveActionError(error: unknown): void {
     return;
   }
   appStore.showError(errorMessage(error));
+}
+
+function requestConfirmation(message: string, danger = false): Promise<boolean> {
+  if (confirmationResolver) confirmationResolver(false);
+  confirmation.message = message;
+  confirmation.danger = danger;
+  confirmation.show = true;
+  return new Promise((resolve) => {
+    confirmationResolver = resolve;
+  });
+}
+
+function resolveConfirmation(accepted: boolean): void {
+  const resolve = confirmationResolver;
+  confirmationResolver = null;
+  confirmation.show = false;
+  resolve?.(accepted);
 }
 
 async function loadPlugins(): Promise<void> {
@@ -446,8 +484,16 @@ function currentRollout(plugin: PluginInstallation): number {
   );
 }
 
-function hasEnabledBinding(plugin: PluginInstallation): boolean {
-  return plugin.bindings.some((binding) => binding.enabled);
+function isPaymentPlugin(plugin: PluginInstallation): boolean {
+  return plugin.manifest.capabilities.some(c => c.id === "payment.usdt_trc20.v1");
+}
+
+function isWebsitePlugin(plugin: PluginInstallation): boolean {
+  return plugin.manifest.capabilities.some((capability) => capability.id === "website.support_widget.v1");
+}
+
+function isPluginEnabled(plugin: PluginInstallation): boolean {
+  return plugin.state === "enabled" || plugin.bindings.some((binding) => binding.enabled);
 }
 
 function setRollout(id: number, event: Event): void {
@@ -458,7 +504,7 @@ function setRollout(id: number, event: Event): void {
 async function enablePlugin(plugin: PluginInstallation): Promise<void> {
   let acceptUntested = false;
   if (!plugin.compatibility.tested) {
-    acceptUntested = window.confirm(t("admin.plugins.confirmUntested"));
+    acceptUntested = await requestConfirmation(t("admin.plugins.confirmUntested"));
     if (!acceptUntested) return;
   }
   busyID.value = plugin.id;
@@ -466,11 +512,12 @@ async function enablePlugin(plugin: PluginInstallation): Promise<void> {
     await pluginStepUp.run(() =>
       adminAPI.plugins.enable(
         plugin.id,
-        rolloutValues.value[plugin.id] || 100,
+        (isWebsitePlugin(plugin) || isPaymentPlugin(plugin)) ? 100 : rolloutValues.value[plugin.id] || 100,
         acceptUntested,
       ),
     );
     appStore.showSuccess(t("admin.plugins.enableSuccess"));
+    window.dispatchEvent(new Event("sub2api:public-plugins-changed"));
     await loadPlugins();
   } catch (error: unknown) {
     reportSensitiveActionError(error);
@@ -480,11 +527,12 @@ async function enablePlugin(plugin: PluginInstallation): Promise<void> {
 }
 
 async function disablePlugin(plugin: PluginInstallation): Promise<void> {
-  if (!window.confirm(t("admin.plugins.confirmDisable"))) return;
+  if (!(await requestConfirmation(isPaymentPlugin(plugin) ? "停用后将隐藏 USDT 付款入口并暂停订单链上核验。已付款订单请先确认到账，确定停用？" : t(isWebsitePlugin(plugin) ? "admin.plugins.confirmDisableWebsite" : "admin.plugins.confirmDisable")))) return;
   busyID.value = plugin.id;
   try {
     await pluginStepUp.run(() => adminAPI.plugins.disable(plugin.id));
     appStore.showSuccess(t("admin.plugins.disableSuccess"));
+    window.dispatchEvent(new Event("sub2api:public-plugins-changed"));
     await loadPlugins();
   } catch (error: unknown) {
     reportSensitiveActionError(error);
@@ -494,11 +542,12 @@ async function disablePlugin(plugin: PluginInstallation): Promise<void> {
 }
 
 async function uninstallPlugin(plugin: PluginInstallation): Promise<void> {
-  if (!window.confirm(t("admin.plugins.confirmUninstall"))) return;
+  if (!(await requestConfirmation(t("admin.plugins.confirmUninstall"), true))) return;
   busyID.value = plugin.id;
   try {
     await pluginStepUp.run(() => adminAPI.plugins.remove(plugin.id));
     appStore.showSuccess(t("admin.plugins.uninstallSuccess"));
+    window.dispatchEvent(new Event("sub2api:public-plugins-changed"));
     await loadPlugins();
   } catch (error: unknown) {
     reportSensitiveActionError(error);
@@ -554,54 +603,76 @@ function closeConfiguration(): void {
 }
 
 function clearPendingBridgeRequests(): void {
-  for (const timeout of pendingBridgeRequests.values()) window.clearTimeout(timeout);
+  for (const request of pendingBridgeRequests.values()) window.clearTimeout(request.timeout);
   pendingBridgeRequests.clear();
 }
 
 function handlePluginFrameLoad(): void {
   // A load can also be caused by a plugin navigating its iframe. Drop all
   // outstanding responses so a late config response is never sent to the new document.
-  if (pluginFrameLoaded.value) clearPendingBridgeRequests();
+  if (pluginFrameLoaded.value) {
+    uiSessionVersion++;
+    clearPendingBridgeRequests();
+  }
   pluginFrameLoaded.value = true;
   uiLoading.value = false;
 }
 
-function registerBridgeRequest(requestID: string): void {
-  const timeout = window.setTimeout(() => {
-    pendingBridgeRequests.delete(requestID);
-  }, 30_000);
-  pendingBridgeRequests.set(requestID, timeout);
+function registerBridgeRequest(requestID: string, type: string, source: Window): PendingBridgeRequest {
+  const request: PendingBridgeRequest = {
+    requestID,
+    type,
+    sessionVersion: uiSessionVersion,
+    pluginID: configPlugin.value!.id,
+    bridgeToken: uiSession.value!.bridge_token,
+    source,
+    timeout: 0,
+  };
+  request.timeout = window.setTimeout(() => {
+    if (pendingBridgeRequests.get(requestID) === request) pendingBridgeRequests.delete(requestID);
+  }, type === "config.save" || type === "config.recover" ? 120_000 : 30_000);
+  pendingBridgeRequests.set(requestID, request);
+  return request;
+}
+
+function isCurrentBridgeRequest(request: PendingBridgeRequest | undefined): request is PendingBridgeRequest {
+  return !!request &&
+    pendingBridgeRequests.get(request.requestID) === request &&
+    request.sessionVersion === uiSessionVersion &&
+    request.pluginID === configPlugin.value?.id &&
+    request.bridgeToken === uiSession.value?.bridge_token &&
+    request.source === pluginFrame.value?.contentWindow;
 }
 
 function postBridgeResult(
-  request: PluginBridgeMessage,
+  request: PendingBridgeRequest | undefined,
   payload: Record<string, unknown>,
-): void {
-  if (!pluginFrame.value?.contentWindow || !uiSession.value) return;
-  const requestID = typeof request.request_id === "string" ? request.request_id.trim() : "";
-  const timeout = pendingBridgeRequests.get(requestID);
-  if (!requestID || timeout === undefined) return;
-  window.clearTimeout(timeout);
-  pendingBridgeRequests.delete(requestID);
-  pluginFrame.value.contentWindow.postMessage(
+): boolean {
+  if (!isCurrentBridgeRequest(request)) return false;
+  window.clearTimeout(request.timeout);
+  pendingBridgeRequests.delete(request.requestID);
+  request.source.postMessage(
     {
       source: "sub2api-plugin-host",
-      bridge_token: uiSession.value.bridge_token,
+      bridge_token: request.bridgeToken,
       type: `${request.type}.result`,
-      request_id: requestID,
+      request_id: request.requestID,
       ...payload,
     },
-    // The sandboxed iframe has an opaque origin, so no fixed target origin exists.
-    // Pending request tracking plus load invalidation prevents cross-navigation leaks.
+    // A sandboxed frame has an opaque origin. Bind each reply to the exact
+    // session and pending request, including when a new frame reuses its ID.
     "*",
   );
+  return true;
 }
 
 async function handleBridgeMessage(event: MessageEvent): Promise<void> {
+  const source = pluginFrame.value?.contentWindow;
   if (
+    !source ||
     !uiSession.value ||
     !configPlugin.value ||
-    event.source !== pluginFrame.value?.contentWindow ||
+    event.source !== source ||
     event.origin !== "null"
   )
     return;
@@ -617,11 +688,13 @@ async function handleBridgeMessage(event: MessageEvent): Promise<void> {
   const expectsResponse =
     message.type === "config.load" ||
     message.type === "config.save" ||
+    message.type === "config.recover" ||
     message.type === "config.test" ||
     message.type === "plugin.status";
+  let request: PendingBridgeRequest | undefined;
   if (expectsResponse) {
     if (!requestID || pendingBridgeRequests.has(requestID)) return;
-    registerBridgeRequest(requestID);
+    request = registerBridgeRequest(requestID, message.type || "", source);
   }
 
   try {
@@ -630,11 +703,15 @@ async function handleBridgeMessage(event: MessageEvent): Promise<void> {
         uiLoading.value = false;
         break;
       case "config.load": {
-        const config = await adminAPI.plugins.getConfig(configPlugin.value.id);
-        postBridgeResult(message, { ok: true, config });
+        const config = await adminAPI.plugins.getConfig(request!.pluginID);
+        postBridgeResult(request, { ok: true, config, context: {
+          locale: locale?.value || "zh",
+          theme: document.documentElement.classList.contains("dark") ? "dark" : "light",
+        } });
         break;
       }
-      case "config.save": {
+      case "config.save":
+      case "config.recover": {
         if (
           !message.config ||
           typeof message.config !== "object" ||
@@ -642,27 +719,32 @@ async function handleBridgeMessage(event: MessageEvent): Promise<void> {
         ) {
           throw new Error(t("admin.plugins.bridgeRejected"));
         }
-        const config = await pluginStepUp.run(() =>
-          adminAPI.plugins.saveConfig(
-            configPlugin.value!.id,
-            message.config as Record<string, unknown>,
-          ),
-        );
-        postBridgeResult(message, { ok: true, config });
-        appStore.showSuccess(t("common.saved"));
+        const configToSave = message.config as Record<string, unknown>;
+        const config = await pluginStepUp.run(() => {
+          // Step-up may finish after this dialog was closed or another plugin opened.
+          if (!isCurrentBridgeRequest(request)) throw new Error(t("admin.plugins.bridgeRejected"));
+          return message.type === "config.recover"
+            ? adminAPI.plugins.recoverConfig(request.pluginID, configToSave)
+            : adminAPI.plugins.saveConfig(request.pluginID, configToSave);
+        });
+        if (postBridgeResult(request, { ok: true, config })) {
+          appStore.showSuccess(t("common.saved"));
+          window.dispatchEvent(new Event("sub2api:public-plugins-changed"));
+        }
         break;
       }
       case "config.test": {
-        const result = await pluginStepUp.run(() =>
-          adminAPI.plugins.test(configPlugin.value!.id),
-        );
-        postBridgeResult(message, { ok: result.success, result });
+        const result = await pluginStepUp.run(() => {
+          if (!isCurrentBridgeRequest(request)) throw new Error(t("admin.plugins.bridgeRejected"));
+          return adminAPI.plugins.test(request.pluginID);
+        });
+        const delivered = postBridgeResult(request, { ok: result.success, result });
         // A successful result is delivered back to the plugin UI, which owns how it
         // presents it (inline status, or an explicit ui.notify). Only force a host
         // toast on failure so genuine errors are never silently dropped — plugins
         // may call config.test for lightweight status polling, not just as an
         // explicit "test" action, and those must not spam a success toast.
-        if (!result.success)
+        if (delivered && !result.success)
           appStore.showError(result.message || t("common.error"));
         break;
       }
@@ -671,8 +753,8 @@ async function handleBridgeMessage(event: MessageEvent): Promise<void> {
         // effects, so it is intentionally NOT step-up gated and never raises a host
         // toast — the plugin UI renders it however it likes. This is the generic
         // channel for any plugin to surface live state without abusing config.test.
-        const result = await adminAPI.plugins.status(configPlugin.value!.id);
-        postBridgeResult(message, { ok: true, result });
+        const result = await adminAPI.plugins.status(request!.pluginID);
+        postBridgeResult(request, { ok: true, result });
         break;
       }
       case "ui.resize": {
@@ -694,8 +776,9 @@ async function handleBridgeMessage(event: MessageEvent): Promise<void> {
       }
     }
   } catch (error: unknown) {
+    if (!isCurrentBridgeRequest(request)) return;
     if (isStepUpBlocked(error)) reportSensitiveActionError(error);
-    postBridgeResult(message, {
+    postBridgeResult(request, {
       ok: false,
       error: isStepUpCancelled(error) ? t("common.cancel") : errorMessage(error),
     });
@@ -728,6 +811,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  resolveConfirmation(false);
   window.removeEventListener("message", handleBridgeMessage);
   closeConfiguration();
 });

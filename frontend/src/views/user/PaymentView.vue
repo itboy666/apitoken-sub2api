@@ -1,6 +1,10 @@
 <template>
   <AppLayout>
     <div class="mx-auto max-w-4xl space-y-6">
+      <div v-if="cryptoOrderActive" class="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-blue-200 bg-blue-50 p-5 dark:border-blue-800 dark:bg-blue-950/40" data-testid="crypto-resume">
+        <div><p class="font-semibold text-slate-800 dark:text-slate-100">{{ t('payment.cryptoCheckout.pendingOrder') }}</p><p class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ t('payment.cryptoCheckout.closeHint') }}</p></div>
+        <button type="button" class="btn btn-primary min-h-11" @click="showCryptoDialog = true">{{ t('payment.cryptoCheckout.reopen') }}</button>
+      </div>
       <div v-if="loading" class="flex items-center justify-center py-20">
         <div class="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"></div>
       </div>
@@ -13,7 +17,7 @@
             @click="activeTab = tab.key">{{ tab.label }}</button>
         </div>
         <!-- Payment in progress (shared by recharge and subscription) -->
-        <template v-if="paymentPhase === 'paying'">
+        <template v-if="paymentPhase === 'paying' && !cryptoOrderActive">
           <PaymentStatusPanel
             :order-id="paymentState.orderId"
             :amount="paymentState.amount"
@@ -76,6 +80,7 @@
                 :selected="selectedMethod"
                 @select="selectedMethod = $event"
               />
+              <p v-if="selectedMethod === 'usdt_trc20_plugin'" class="mt-4 rounded-xl bg-teal-50 p-4 text-sm leading-6 text-teal-900 dark:bg-teal-950 dark:text-teal-100">1 USDT = 6.5 CNY · 使用 TRON（TRC20）网络。确认后将在当前页面打开付款窗口，请按窗口内完整金额转账。</p>
               <StripeSubtypeSelector v-if="selectedMethod === 'stripe' && Object.keys(stripeSubMethods).length" v-model="selectedSubtype" :methods="stripeSubMethods" />
             </div>
             <RechargeCouponPicker :amount="validAmount" :method="selectedMethod" :currency="selectedCurrency" :disabled="submitting" :initial-id="Number(route.query.coupon) || undefined" @change="onCouponChange" />
@@ -111,7 +116,7 @@
               </div>
             </div>
             <p v-if="feeRangeVaries" class="text-xs text-gray-500 dark:text-gray-400" data-testid="fee-range-hint">{{ t('payment.feeRangeHint') }}</p>
-            <button :class="['btn w-full py-3 text-base font-medium', paymentButtonClass]" :disabled="!canSubmit || submitting" @click="handleSubmitRecharge">
+            <button :class="['btn w-full py-3 text-base font-medium', paymentButtonClass]" :disabled="!canSubmit || submitting || cryptoOrderActive" @click="handleSubmitRecharge">
               <span v-if="submitting" class="flex items-center justify-center gap-2">
                 <span class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
                 {{ t('common.processing') }}
@@ -227,7 +232,8 @@
                   :selected="selectedMethod"
                   @select="selectedMethod = $event"
                 />
-                <StripeSubtypeSelector v-if="selectedMethod === 'stripe' && Object.keys(stripeSubMethods).length" v-model="selectedSubtype" :methods="stripeSubMethods" />
+                <p v-if="selectedMethod === 'usdt_trc20_plugin'" class="mt-4 rounded-xl bg-teal-50 p-4 text-sm leading-6 text-teal-900 dark:bg-teal-950 dark:text-teal-100">1 USDT = 6.5 CNY · 使用 TRON（TRC20）网络。确认后将在当前页面打开付款窗口，请按窗口内完整金额转账。</p>
+              <StripeSubtypeSelector v-if="selectedMethod === 'stripe' && Object.keys(stripeSubMethods).length" v-model="selectedSubtype" :methods="stripeSubMethods" />
               </div>
               <div v-if="hasFee && selectedPlan.price > 0" class="card p-6">
                 <div class="space-y-2 text-sm">
@@ -246,7 +252,7 @@
                 </div>
               </div>
               <p v-if="feeRangeVaries" class="text-xs text-gray-500 dark:text-gray-400" data-testid="fee-range-hint">{{ t('payment.feeRangeHint') }}</p>
-            <button :class="['btn w-full py-3 text-base font-medium', paymentButtonClass]" :disabled="!canSubmitSubscription || submitting" @click="confirmSubscribe">
+            <button :class="['btn w-full py-3 text-base font-medium', paymentButtonClass]" :disabled="!canSubmitSubscription || submitting || cryptoOrderActive" @click="confirmSubscribe">
                 <span v-if="submitting" class="flex items-center justify-center gap-2">
                   <span class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
                   {{ t('common.processing') }}
@@ -301,6 +307,7 @@
         </div>
       </template>
     </div>
+    <CryptoPaymentDialog v-if="cryptoOrderActive" :show="showCryptoDialog" :out-trade-no="paymentState.outTradeNo" @close="closeCryptoDialog" @settled="onCryptoSettled" />
     <!-- Renewal Plan Selection Modal -->
     <Teleport to="body">
       <Transition name="modal">
@@ -330,7 +337,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, defineAsyncComponent } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -378,6 +385,8 @@ import type { PaymentMethodOption } from '@/components/payment/PaymentMethodSele
 import { buildPaymentErrorToastMessage, describePaymentScenarioError } from './paymentUx'
 import { hasWechatResumeQuery, parseWechatResumeRoute, stripWechatResumeQuery } from './paymentWechatResume'
 
+const CryptoPaymentDialog = defineAsyncComponent(() => import('@/components/payment/CryptoPaymentDialog.vue'))
+
 const i18n = useI18n()
 const { t } = i18n
 const route = useRoute()
@@ -423,6 +432,9 @@ const selectedActiveSubscription = computed(() => {
 })
 
 const paymentPhase = ref<'select' | 'paying'>('select')
+const showCryptoDialog = ref(false)
+const cryptoSettledStatus = ref('')
+const cryptoOrderActive = computed(() => paymentPhase.value === 'paying' && paymentState.value.paymentType === 'usdt_trc20_plugin' && !!paymentState.value.outTradeNo)
 
 interface CreateOrderOptions {
   openid?: string
@@ -512,6 +524,8 @@ function removeRecoverySnapshot() {
 }
 
 function resetPayment() {
+  showCryptoDialog.value = false
+  cryptoSettledStatus.value = ''
   paymentPhase.value = 'select'
   paymentState.value = emptyPaymentState()
   removeRecoverySnapshot()
@@ -594,6 +608,20 @@ async function onPaymentSuccess() {
     subscriptionStore.fetchActiveSubscriptions(true).catch(() => {})
   }
   await redirectToPaymentResult(completedPayment)
+}
+
+function closeCryptoDialog() {
+  showCryptoDialog.value = false
+  if (cryptoSettledStatus.value) onPaymentDone()
+}
+
+function onCryptoSettled(status: string) {
+  cryptoSettledStatus.value = status
+  removeRecoverySnapshot()
+  if (status === 'COMPLETED') {
+    void authStore.refreshUser()
+    if (paymentState.value.orderType === 'subscription') subscriptionStore.fetchActiveSubscriptions(true).catch(() => {})
+  }
 }
 
 function onPaymentSettled() {
@@ -1040,6 +1068,11 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
     paymentPhase.value = 'paying'
     persistRecoverySnapshot(decision.recovery)
 
+    if (decision.kind === 'crypto_dialog') {
+      cryptoSettledStatus.value = ''
+      showCryptoDialog.value = true
+      return
+    }
     if (decision.kind === 'stripe_popup') {
       openWindow(decision.paymentState.payUrl)
       return
@@ -1319,6 +1352,7 @@ onMounted(async () => {
       if (restored) {
         paymentState.value = restored
         paymentPhase.value = 'paying'
+        showCryptoDialog.value = restored.paymentType === 'usdt_trc20_plugin' && !!restored.outTradeNo
         const restoredMethod = normalizeVisibleMethod(restored.paymentType)
           || (visibleMethods.value[restored.paymentType] ? restored.paymentType : '')
         if (restoredMethod) {

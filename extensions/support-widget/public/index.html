@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>联系与支持</title><link rel="stylesheet" href="widget.css"><script defer src="widget.js"></script></head>
+<body>
+<svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+<symbol id="i-chat" viewBox="0 0 24 24"><path d="M7 17H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-7l-6 4z"/><path d="M7 9h.01M12 9h.01M17 9h.01"/></symbol>
+<symbol id="i-users" viewBox="0 0 24 24"><circle cx="12" cy="6" r="3"/><path d="M6 21v-2a6 6 0 0 1 12 0v2zM5 10a3 3 0 0 0-1 6M3 21H1v-2a5 5 0 0 1 3-4M19 10a3 3 0 0 1 1 6M21 21h2v-2a5 5 0 0 0-3-4"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></symbol>
+<symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24"><path d="M14 3h7v7m0-7L10 14M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5"/></symbol>
+</defs></svg>
+<div id="widget" hidden>
+<section id="panel" class="panel" aria-labelledby="panel-title" tabindex="-1" hidden>
+<header><div><p class="eyebrow">LET’S CONNECT</p><h2 id="panel-title"></h2></div><button id="close" type="button" class="icon-button" aria-label="关闭联系面板"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button></header>
+<p id="description" class="description"></p>
+<div id="channels" class="channels" role="group" aria-label="联系方式"><button type="button" id="tab-service" aria-pressed="true">客服</button><button type="button" id="tab-qq" aria-pressed="false">QQ 群</button></div>
+<div id="service" class="details">
+<div class="channel-title"><svg class="icon" aria-hidden="true"><use href="#i-chat"/></svg><h3 id="service-label"></h3></div>
+<div id="service-contact-box" class="contact"><span id="service-contact" class="contact-value"></span><button id="copy-service" type="button" class="copy"><svg class="icon small" aria-hidden="true"><use href="#i-copy"/></svg><span data-text="copy">复制</span></button></div>
+<button id="service-url" type="button" class="primary"><span data-text="contact">前往联系</span><svg class="icon small" aria-hidden="true"><use href="#i-link"/></svg></button>
+<button id="ticket" type="button" class="primary"><span data-text="ticket">提交站内工单</span><svg class="icon small" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+<p id="ticket-hint" class="helper" data-text="ticketHint"></p>
+</div>
+<div id="qq" class="details" hidden>
+<div class="channel-title"><svg class="icon" aria-hidden="true"><use href="#i-users"/></svg><h3 data-text="qqTitle">加入 QQ 交流群</h3></div>
+<div id="qq-number-box" class="contact"><span id="qq-number" class="contact-value number"></span><button id="copy-qq" type="button" class="copy"><svg class="icon small" aria-hidden="true"><use href="#i-copy"/></svg><span data-text="copy">复制</span></button></div>
+<button id="qq-url" type="button" class="primary"><span data-text="join">前往加入 QQ 群</span><svg class="icon small" aria-hidden="true"><use href="#i-link"/></svg></button>
+<p id="qq-hint" class="helper"></p>
+</div>
+<p id="feedback" class="feedback" role="status" aria-live="polite" aria-atomic="true"></p>
+</section>
+<div id="dock" class="dock" role="group" aria-label="联系方式">
+<button id="launch-service" type="button" class="dock-button" aria-expanded="false" aria-controls="panel" aria-label="打开客服联系方式"><svg class="icon large" aria-hidden="true"><use href="#i-chat"/></svg><span data-text="service">客服</span></button>
+<span id="divider" class="divider" aria-hidden="true"></span>
+<button id="launch-qq" type="button" class="dock-button" aria-expanded="false" aria-controls="panel" aria-label="打开 QQ 交流群"><svg class="icon large" aria-hidden="true"><use href="#i-users"/></svg><span data-text="qq">QQ 群</span></button>
+</div>
+<button id="mobile-launcher" type="button" class="mobile-launcher" aria-expanded="false" aria-controls="panel" aria-label="打开客服与交流群"><svg class="icon" aria-hidden="true"><use id="mobile-icon" href="#i-chat"/></svg><span data-text="help">帮助</span></button>
+</div>
+</body></html>

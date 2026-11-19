@@ -1083,3 +1083,43 @@ describe('PaymentView provider and method fees', () => {
     expect(createOrder).toHaveBeenCalledWith(expect.objectContaining({ payment_type: 'stripe', payment_subtype: 'alipay' }))
   })
 })
+
+describe('PaymentView USDT inline checkout', () => {
+  it('opens in place, reopens the same order, restores after reload and only clears a settled order', async () => {
+    vi.useRealTimers()
+    window.localStorage.clear()
+    routeState.query = {}
+    const method = checkoutInfoFixture().data.methods.wxpay
+    getCheckoutInfo.mockResolvedValue(checkoutInfoFixture({ methods: { usdt_trc20_plugin: method } }))
+    createOrder.mockReset().mockResolvedValue({ order_id: 99, amount: 10, pay_amount: 10.4, fee_rate: 4, expires_at: '2099-01-01T00:00:00Z', out_trade_no: 'usdt-inline-order', payment_type: 'usdt_trc20_plugin', payment_mode: 'redirect', pay_url: '/payment/crypto/usdt-inline-order' })
+    const popup = vi.spyOn(window, 'open')
+    const options = { global: { stubs: {
+      AppLayout: { template: '<div><slot /></div>' }, Teleport: true, Transition: false,
+      CryptoPaymentDialog: { name: 'CryptoPaymentDialog', props: ['show','outTradeNo'], emits: ['close','settled'], template: '<aside v-if="show" data-testid="inline-crypto" :data-order="outTradeNo"><button @click="$emit(\'close\')">close-checkout</button></aside>' },
+    } } }
+    let page = shallowMount(PaymentView, options)
+    await flushPromises()
+    page.findComponent(AmountInput).vm.$emit('update:modelValue', 10)
+    await flushPromises()
+    await page.findAll('button').find(b => b.text().includes('payment.createOrder'))!.trigger('click')
+    await flushPromises()
+    expect(page.get('[data-testid="inline-crypto"]').attributes('data-order')).toBe('usdt-inline-order')
+    expect(popup).not.toHaveBeenCalled()
+    await page.get('[data-testid="inline-crypto"] button').trigger('click')
+    expect(page.find('[data-testid="inline-crypto"]').exists()).toBe(false)
+    expect(window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY)).toContain('usdt-inline-order')
+    await page.get('[data-testid="crypto-resume"] button').trigger('click')
+    expect(page.get('[data-testid="inline-crypto"]').attributes('data-order')).toBe('usdt-inline-order')
+    expect(createOrder).toHaveBeenCalledTimes(1)
+    page.unmount()
+    page = shallowMount(PaymentView, options)
+    await flushPromises()
+    expect(page.get('[data-testid="inline-crypto"]').attributes('data-order')).toBe('usdt-inline-order')
+    page.findComponent({ name: 'CryptoPaymentDialog' }).vm.$emit('settled', 'CANCELLED')
+    await page.get('[data-testid="inline-crypto"] button').trigger('click')
+    expect(page.find('[data-testid="crypto-resume"]').exists()).toBe(false)
+    expect(window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY)).toBeNull()
+    page.unmount()
+    popup.mockRestore()
+  })
+})

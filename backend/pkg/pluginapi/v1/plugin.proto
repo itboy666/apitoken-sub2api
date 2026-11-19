@@ -10,6 +10,9 @@ service TransportPlugin {
   rpc ValidateConfig(ValidateConfigRequest) returns (ValidateConfigResponse);
   rpc ApplyConfig(ApplyConfigRequest) returns (ApplyConfigResponse);
   rpc TestConfig(TestConfigRequest) returns (TestConfigResponse);
+  // Optional read-only payment verifier. The host owns invoices, the unique
+  // transaction ledger and fulfillment; plugins cannot directly credit users.
+  rpc VerifyPayment(VerifyPaymentRequest) returns (VerifyPaymentResponse);
   rpc Forward(stream ForwardRequest) returns (stream ForwardResponse);
   // InitHostServices hands the plugin a go-plugin broker stream id it can dial
   // back to reach the host-provided HostService. It is an optional, generic
@@ -95,6 +98,26 @@ message TestConfigResponse {
 
 message HeaderValues {
   repeated string values = 1;
+}
+
+message VerifyPaymentRequest {
+  string order_id = 1;
+  string address = 2;
+  string amount_micro = 3;
+  int64 created_at_ms = 4;
+  int64 expires_at_ms = 5;
+}
+
+message VerifyPaymentResponse {
+  bool paid = 1;
+  string transaction_hash = 2;
+  string contract_address = 3;
+  string to_address = 4;
+  string from_address = 5;
+  string amount_micro = 6;
+  int64 block = 7;
+  int64 timestamp_ms = 8;
+  int64 confirmations = 9;
 }
 
 message ForwardRequestStart {

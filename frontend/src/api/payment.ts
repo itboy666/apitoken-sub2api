@@ -24,6 +24,8 @@ export interface PublicOrderVerifyResult {
 }
 
 export interface CryptoCheckout {
+  exchange_rate?: string
+  contract_address?: string
   network_status?: 'healthy' | 'delayed' | 'checking'
   order_id: number
   out_trade_no: string

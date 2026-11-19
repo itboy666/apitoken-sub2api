@@ -13,6 +13,11 @@ export default {
   "stop": "Stop this batch",
   "ownedJobs": "Some login tasks are unresolved, so this window must stay open. Continue unfinished entries to resume them, or stop this batch to clean them up. If cleanup fails, you can try again.",
   "reset": "Import another batch",
+  "failures": {
+    "groupsRequired": "Logged in, but not imported: the target groups were deleted or are unavailable. Select valid groups in Auto Config or explicitly in the import form, then retry.",
+    "accountImport": "Logged in; account import is incomplete. Check the group and account settings, then retry.",
+    "credentialEnrollment": "Account imported; Credential Operations enrollment is incomplete. Check encryption and operations settings, then retry. Existing accounts will not be duplicated."
+  },
   "states": {
     "pending": "Pending",
     "login": "Logging in…",
@@ -20,7 +25,7 @@ export default {
     "created": "Imported and enrolled in Credential Operations",
     "skipped": "Existing account enrolled in Credential Operations",
     "failed": "Login incomplete; retry or check credentials and the initial login service",
-    "importFailed": "Logged in; import or Credential Operations enrollment incomplete. Check encryption settings and retry"
+    "importFailed": "Logged in; import or Credential Operations enrollment is incomplete. Check group, account and operations settings, then retry unfinished records."
   }
 }
 }

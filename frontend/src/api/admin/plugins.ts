@@ -25,6 +25,7 @@ export interface PluginManifest {
   requires: PluginRequirements
   capabilities: PluginCapability[]
   ui: { entrypoint: string }
+  public_ui?: { entrypoint: string }
 }
 
 export interface PluginCompatibility {
@@ -145,6 +146,16 @@ export async function test(id: number): Promise<PluginTestResult> {
   return data
 }
 
+export async function recoverConfig(
+  id: number,
+  config: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const { data } = await apiClient.post<Record<string, unknown>>(`/admin/plugins/${id}/config/recover`, config, {
+    headers: { 'X-Plugin-Config-Recovery': 'confirmed' }
+  })
+  return data
+}
+
 export async function status(id: number): Promise<PluginStatusResult> {
   const { data } = await apiClient.get<PluginStatusResult>(`/admin/plugins/${id}/status`)
   return data
@@ -163,6 +174,7 @@ export default {
   remove,
   getConfig,
   saveConfig,
+  recoverConfig,
   test,
   status,
   createUISession

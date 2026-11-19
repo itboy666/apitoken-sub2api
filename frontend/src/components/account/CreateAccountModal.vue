@@ -4373,6 +4373,7 @@ import { applyQwenCacheSettings } from './qwenCacheSettings'
 import OpenAIRequestTimezoneField from '@/components/account/OpenAIRequestTimezoneField.vue'
 import ExtraImageModelsField from '@/components/account/ExtraImageModelsField.vue'
 import { parseExtraImageModels } from '@/utils/extraImageModels'
+import { twoFAImportFailureKey } from '@/utils/twoFAImportFailure'
 import { DEFAULT_ACCOUNT_COST_MULTIPLIER, isValidAccountCostMultiplier } from '@/utils/accountCost'
 
 import OpenAITwoFAImport from './OpenAITwoFAImport.vue'
@@ -7458,7 +7459,11 @@ const importTwoFACredential = async (credential: Record<string, unknown>, email:
     skip_existing: true
   }, signal)
   signal?.throwIfAborted()
-  if (result.failed > 0) throw new Error('import_failed')
+  if (result.failed > 0) {
+    const missingGroups = (result.items ?? []).some(item =>
+      item.action === 'failed' && twoFAImportFailureKey({ message: item.message }) === 'openaiRelogin.twoFA.failures.groupsRequired')
+    throw new Error(missingGroups ? 'import_groups_required' : 'account_import_failed')
+  }
   if (result.created > 0) {
     await createAutoBPSRules(createdImportAccountIds(result), signal)
   }
@@ -7475,8 +7480,13 @@ const importTwoFACredential = async (credential: Record<string, unknown>, email:
       password: login.password, totp_secret: login.mfa_secret,
       enabled: true, auto_relogin_enabled: true
     }
-    if (signal) await createTokenGuardV2Account(enrollment, { signal })
-    else await createTokenGuardV2Account(enrollment)
+    try {
+      if (signal) await createTokenGuardV2Account(enrollment, { signal })
+      else await createTokenGuardV2Account(enrollment)
+    } catch (cause) {
+      if (signal?.aborted) throw cause
+      throw new Error('credential_enrollment_failed')
+    }
   }
   signal?.throwIfAborted()
   if (result.created > 0) {

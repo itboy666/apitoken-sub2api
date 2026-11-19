@@ -186,6 +186,9 @@ func (s *PaymentService) reconcilePaid(ctx context.Context, o *dbent.PaymentOrde
 }
 
 func (s *PaymentService) checkPaidWithOptions(ctx context.Context, o *dbent.PaymentOrder, opts checkPaidOptions) string {
+	if o.PaymentType == PaymentTypeUSDTPlugin {
+		return s.checkUSDTPaid(ctx, o)
+	}
 	prov, err := s.getOrderProvider(ctx, o)
 	if err != nil {
 		return ""
@@ -345,7 +348,7 @@ func (s *PaymentService) VerifyOrderByOutTradeNo(ctx context.Context, outTradeNo
 		return nil, infraerrors.Forbidden("FORBIDDEN", "no permission for this order")
 	}
 	// Only verify orders that are still pending or recently expired
-	if o.Status == OrderStatusPending || o.Status == OrderStatusExpired {
+	if o.Status == OrderStatusPending || o.Status == OrderStatusExpired || (o.PaymentType == PaymentTypeUSDTPlugin && o.PaidAt != nil) {
 		result := s.reconcilePaid(ctx, o)
 		if result == checkPaidResultAlreadyPaid {
 			// Reload order to get updated status

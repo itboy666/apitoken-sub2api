@@ -933,7 +933,7 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     const credential = { access_token: 'test-access', refresh_token: 'test-refresh' }
     const login = { email: 'user@example.com', password: 'test-password', mfa_secret: 'test-secret' }
     createCredentialOperationsMock.mockRejectedValueOnce(new Error('encryption unavailable'))
-    await expect(importer.props('importCredential')(credential, login.email, login)).rejects.toThrow()
+    await expect(importer.props('importCredential')(credential, login.email, login)).rejects.toThrow('credential_enrollment_failed')
     expect(wrapper.emitted('created')).toBeUndefined()
     importCodexSessionMock.mockResolvedValue({ created: 0, updated: 0, skipped: 1, failed: 0, items: [{ action: 'skipped', account_id: 42 }] })
     await expect(importer.props('importCredential')(credential, login.email, login)).resolves.toBe('skipped')
@@ -941,6 +941,21 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     expect(createCredentialOperationsMock.mock.calls[1]?.[0]).toMatchObject({
       account_id: 42, password: login.password, totp_secret: login.mfa_secret, enabled: true, auto_relogin_enabled: true,
     })
+  })
+
+  it.each(['GROUP_NOT_FOUND', 'AUTO_CONFIG_GROUPS_REQUIRED'])('reports %s without leaking backend error details or enrolling a failed import', async reason => {
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'OpenAI')
+    await wrapper.get('[data-testid="openai-two-fa"]').trigger('click')
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    importCodexSessionMock.mockResolvedValueOnce({
+      created: 0, updated: 0, skipped: 0, failed: 1,
+      items: [{ action: 'failed', message: `error: reason="${reason}" message="private detail"` }],
+    })
+    const login = { email: 'user@example.com', password: 'test-password', mfa_secret: 'test-secret' }
+    await expect(wrapper.getComponent(OpenAITwoFAImport).props('importCredential')({}, login.email, login)).rejects.toThrow('import_groups_required')
+    expect(createCredentialOperationsMock).not.toHaveBeenCalled()
+    expect(wrapper.emitted('created')).toBeUndefined()
   })
 
   it('keeps parallel 2FA imports and enrollment identities isolated until each enrollment completes', async () => {

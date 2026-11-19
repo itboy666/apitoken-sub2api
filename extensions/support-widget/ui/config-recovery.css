@@ -1,0 +1,8 @@
+.recovery-actions{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}
+.recovery-confirm,.recovery-banner{padding:16px;border:1px solid #e7a33e;border-radius:8px;background:#fff8e8;color:#593d13;font-size:13px;line-height:1.7}
+.recovery-confirm h2{font-size:15px;margin-bottom:6px}
+.recovery-confirm p{margin:0}
+.recovery-banner{margin:0 0 18px}
+.danger{min-height:44px;padding:11px 16px;border:1px solid #bd3f31;border-radius:8px;background:#a92e25;color:#fff;font-size:13px;font-weight:600}
+.dark .recovery-confirm,.dark .recovery-banner{border-color:#9f7331;background:#362c1c;color:#ffe6b4}
+.dark .danger{background:#c45348;border-color:#ed847a}

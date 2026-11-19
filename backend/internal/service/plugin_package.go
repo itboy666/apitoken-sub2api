@@ -23,6 +23,9 @@ const (
 	pluginManifestFilename                   = "manifest.json"
 	pluginSignatureFilename                  = "signature.json"
 	pluginArchiveMaxFiles                    = 512
+	builtInSupportWidgetPluginID             = "local.apitoken.support-widget"
+	builtInSupportWidgetPublisherKeyID       = "apitoken-support-widget-v1"
+	builtInSupportWidgetPublisherKeyBase64   = "d1XBjmQsI0KNknAXLNAlGaJ3Xo9MGunELdppLSdoAwk="
 	builtInOpenAITransportPluginID           = "local.sub2api.openai-transport"
 	builtInOpenAITransportPublisherKeyID     = "sub2api-openai-transport-v1"
 	builtInOpenAITransportPublisherKeyBase64 = "MqzSXAoG0iVR5kKWrC+mqcCeExkrT6zAr2WpQ4sA+yc="
@@ -164,6 +167,12 @@ func (i *PluginPackageInstaller) Install(ctx context.Context, reader io.Reader, 
 		return nil, fmt.Errorf("读取已保存插件包: %w", err)
 	}
 	runtimeEntry := manifest.Runtimes[manifest.RuntimeKey()]
+	binaryPath := filepath.Join(installPath, filepath.FromSlash(runtimeEntry.Path))
+	binarySHA256 := manifest.Files[runtimeEntry.Path]
+	if manifest.IsSupportWidget() {
+		binaryPath = ""
+		binarySHA256 = manifest.StaticIdentity()
+	}
 	return &PluginInstallation{
 		PluginKey:       manifest.ID,
 		Name:            manifest.Name,
@@ -174,8 +183,8 @@ func (i *PluginPackageInstaller) Install(ctx context.Context, reader io.Reader, 
 		ArtifactData:    artifactData,
 		ArtifactPath:    artifactPath,
 		InstallPath:     installPath,
-		BinaryPath:      filepath.Join(installPath, filepath.FromSlash(runtimeEntry.Path)),
-		BinarySHA256:    manifest.Files[runtimeEntry.Path],
+		BinaryPath:      binaryPath,
+		BinarySHA256:    binarySHA256,
 		SignatureStatus: signatureStatus,
 		State:           initialState,
 		InstalledBy:     installedBy,
@@ -232,6 +241,9 @@ func (i *PluginPackageInstaller) inspectArchive(archive *zip.Reader) (PluginMani
 	if err := manifest.Validate(); err != nil {
 		return PluginManifest{}, nil, "", err
 	}
+	if manifest.ID == builtInSupportWidgetPluginID && !manifest.IsSupportWidget() {
+		return PluginManifest{}, nil, "", errors.New("APIToken 客服发布者仅支持静态网站客服能力")
+	}
 	for path := range entries {
 		if path == pluginManifestFilename || path == pluginSignatureFilename {
 			continue
@@ -286,7 +298,19 @@ func (i *PluginPackageInstaller) verifySignature(file *zip.File, manifestRaw []b
 }
 
 func trustedPluginPublisherKey(cfg *config.Config, keyID, pluginID string) string {
+	if keyID == "apitoken-usdt-trc20-v1" {
+		if pluginID != "local.apitoken.usdt-trc20" {
+			return ""
+		}
+		return "LxSMcwPgnKO8SuZkrk0CxT5ywg/jSSgyXvAoFo8rpAk="
+	}
 	// 内置公钥是官方私有插件的固定信任根，不允许被部署配置覆盖。
+	if keyID == builtInSupportWidgetPublisherKeyID {
+		if pluginID != builtInSupportWidgetPluginID {
+			return ""
+		}
+		return builtInSupportWidgetPublisherKeyBase64
+	}
 	if keyID == builtInOpenAITransportPublisherKeyID {
 		if pluginID != builtInOpenAITransportPluginID {
 			return ""

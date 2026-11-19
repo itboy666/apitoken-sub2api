@@ -22,6 +22,7 @@ const VISIBLE_METHOD_ALIASES = {
 export type VisiblePaymentMethod = 'alipay' | 'wxpay' | 'stripe' | 'airwallex'
 export type StripeVisibleMethod = 'alipay' | 'wechat_pay'
 export type PaymentLaunchKind =
+  | 'crypto_dialog'
   | 'qr_waiting'
   | 'alipay_deep_link'
   | 'redirect_waiting'
@@ -179,6 +180,10 @@ export function decidePaymentLaunch(
     resumeToken: result.resume_token || '',
     alipayMobilePrecreateDeepLink: result.alipay_mobile_precreate_deep_link === true,
   }, context.now)
+
+  if (visibleMethod === 'usdt_trc20_plugin' && baseState.outTradeNo) {
+    return { kind: 'crypto_dialog', paymentState: baseState, recovery: baseState }
+  }
 
   if (visibleMethod === 'airwallex' && baseState.clientSecret && baseState.intentId) {
     if (!context.airwallexRouteUrl) {

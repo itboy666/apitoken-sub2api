@@ -31,6 +31,24 @@ async function start(wrapper: ReturnType<typeof mount>, input: string) {
 }
 
 describe('OpenAI initial 2FA import', () => {
+  it.each([
+    ['import_groups_required', 'groupsRequired'],
+    ['account_import_failed', 'accountImport'],
+    ['credential_enrollment_failed', 'credentialEnrollment'],
+  ])('shows safe stage advice for %s and clears it on retry', async (message, key) => {
+    const importCredential = vi.fn().mockRejectedValueOnce(new Error(message)).mockResolvedValueOnce('created')
+    const wrapper = mount(OpenAITwoFAImport, { props: { importCredential } })
+    await start(wrapper, 'a@example.com----private-password----private-secret')
+    expect(wrapper.text()).toContain(`openaiRelogin.twoFA.failures.${key}`)
+    expect(wrapper.text()).not.toContain('private-password')
+    expect(wrapper.text()).not.toContain('private-secret')
+    await wrapper.get('[data-testid="two-fa-start"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('openaiRelogin.twoFA.states.created')
+    expect(wrapper.text()).not.toContain(`openaiRelogin.twoFA.failures.${key}`)
+    expect(startTwoFALogin).toHaveBeenCalledTimes(1)
+  })
+
   it('imports each account, skips completed rows, and retries creation without logging in again', async () => {
     const importCredential = vi.fn().mockResolvedValueOnce('created').mockRejectedValueOnce(new Error('do not display credential'))
     const wrapper = mount(OpenAITwoFAImport, { props: { importCredential } })

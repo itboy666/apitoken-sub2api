@@ -18,7 +18,7 @@
     <ul v-if="rows.length" class="space-y-2" aria-live="polite">
       <li v-for="(row, index) in rows" :key="row.entry.email" class="flex justify-between gap-4 text-sm">
         <span>{{ index + 1 }}. {{ row.entry.email }}</span>
-        <span>{{ t(`openaiRelogin.twoFA.states.${row.status}`) }}</span>
+        <span>{{ t(row.failureKey || `openaiRelogin.twoFA.states.${row.status}`) }}</span>
       </li>
     </ul>
     <div class="flex gap-3">
@@ -41,6 +41,7 @@ import CredentialEncryptionSetup from './CredentialEncryptionSetup.vue'
 import { useI18n } from 'vue-i18n'
 import { deleteTwoFALogin, getTwoFALogin, parseTwoFALoginText, startTwoFALogin } from '@/api/admin/openaiRelogin'
 import type { OpenAIReloginCredentials } from '@/api/admin/openaiRelogin'
+import { twoFAImportFailureKey } from '@/utils/twoFAImportFailure'
 
 const props = defineProps<{
   importCredential: (credential: Record<string, unknown>, email: string, login: OpenAIReloginCredentials, signal?: AbortSignal) => Promise<'created' | 'skipped'>
@@ -54,6 +55,7 @@ type Row = {
   jobId?: string
   cleanup?: Promise<void>
   retiring?: boolean
+  failureKey?: string
 }
 const raw = ref('')
 const encryptionReady = ref(false)
@@ -157,6 +159,7 @@ async function run() {
 }
 
 async function runRow(row: Row, signal: AbortSignal) {
+  row.failureKey = undefined
   try {
     if (row.retiring) await discardJob(row)
     signal.throwIfAborted()
@@ -204,6 +207,7 @@ async function runRow(row: Row, signal: AbortSignal) {
       (cause as { response?: { status?: number } })?.response?.status
     if (status === 404 && !row.retiring) row.jobId = undefined
     row.status = row.credential ? 'importFailed' : 'failed'
+    if (row.credential) row.failureKey = twoFAImportFailureKey(cause)
   }
   // A polling/cleanup failure has not terminated the server job. Its worker
   // stays reserved rather than dequeuing a fourth live account pipeline.

@@ -8,12 +8,14 @@
 - [UI Bridge](docs/ui-bridge.md)：沙箱配置 UI 的消息结构和安全要求。
 - [包格式](docs/package-format.md)：清单、文件哈希、签名和版本规则。
 - [安全边界](docs/security.md)：进程权限、敏感数据和故障策略。
+- [USDT 支付插件](docs/usdt-payments.md)：独立核验进程、精确金额订单与持久交易去重。
+- [网站客服插件](docs/website-widgets.md)：不启动进程的签名静态插件、公开资源和生命周期。
 
 ## 实体与运行方式
 
-插件的交付实体是一个 `.s2plugin` 文件，本质上是带清单、签名、独立可执行文件和静态 UI 的 ZIP 包。管理员在独立的插件管理页手动上传，Sub2API 不从网络自动下载插件，也不要求 Docker。
+插件的交付实体是一个 `.s2plugin` 文件，本质上是带清单、签名和静态 UI 的 ZIP 包；出站插件另外包含独立可执行文件。管理员在独立的插件管理页手动上传，Sub2API 不从网络自动下载插件，也不要求 Docker。
 
-启用后，Sub2API 以子进程方式拉起当前操作系统和 CPU 架构对应的二进制，通过本机 gRPC 流传递请求与响应。插件进程退出时会随 Sub2API 清理；停用时先停止接收新请求，再等待正在处理的请求结束。
+出站插件启用后，Sub2API 以子进程方式拉起当前操作系统和 CPU 架构对应的二进制，通过本机 gRPC 流传递请求与响应。插件进程退出时会随 Sub2API 清理；停用时先停止接收新请求，再等待正在处理的请求结束。网站客服插件只发布包内静态资源，不创建进程。
 
 多实例部署不要求共享插件目录。宿主会在数据库保存已验签的原始插件包，各实例缺少本地文件时会重新验签和解包，并周期性对齐启用状态、灰度比例和加密配置。所有实例必须连接同一数据库并使用相同的加密密钥。
 
@@ -21,7 +23,7 @@
 
 ## 初期能力边界
 
-当前只接受 `openai.oauth.outbound_transport.v1`：
+`openai.oauth.outbound_transport.v1` 保持以下范围：
 
 - 仅匹配 `platform=openai` 且 `account_type=oauth` 的上游 HTTP 请求。
 - API Key 账号、其他 provider、OAuth 登录与 Token 刷新流程不进入插件。
@@ -29,6 +31,8 @@
 - 命中插件的 OAuth WebSocket 账号会使用 Sub2API 现有 HTTP Bridge，不直接建立上游 WebSocket，避免绕过 v1 HTTP 插件协议。
 - Sub2API 继续负责响应状态处理、SSE 解析、错误映射、用量统计、计费和下游输出。
 - 灰度比例以账号 ID 稳定分桶，未命中的 OAuth 账号继续使用原有内置路径。
+
+`website.support_widget.v1` 使用 `platform=website`、`account_type=none`，仅支持公开客服浮窗。它可以与出站插件同时启用，不能混合声明出站能力、获取账号目录或使用进程运行时。其 UI 和交互实现位于独立插件包，宿主只提供通用 iframe 容器与受限公开配置。
 
 ## 宿主服务（HostService）
 

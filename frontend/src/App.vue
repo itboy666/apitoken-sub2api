@@ -2,6 +2,7 @@
 import { RouterView, useRouter, useRoute } from 'vue-router'
 import { computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import Toast from '@/components/common/Toast.vue'
+import PublicPluginHost from '@/components/common/PublicPluginHost.vue'
 import NavigationProgress from '@/components/common/NavigationProgress.vue'
 import AdminComplianceDialog from '@/components/admin/AdminComplianceDialog.vue'
 import { resolveRouteDocumentTitle } from '@/router/title'
@@ -197,6 +198,7 @@ onMounted(async () => {
   <NavigationProgress />
   <RouterView />
   <Toast />
+  <PublicPluginHost />
   <AnnouncementPopup />
   <AdminComplianceDialog />
 </template>

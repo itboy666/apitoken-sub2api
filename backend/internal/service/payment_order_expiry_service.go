@@ -96,6 +96,12 @@ func (s *PaymentOrderExpiryService) runOnce() {
 		return
 	}
 	defer release()
+	usdtCtx, usdtCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	_, usdtErr := s.paymentSvc.ReconcileUSDTPaymentOrders(usdtCtx)
+	usdtCancel()
+	if usdtErr != nil {
+		slog.Warn("USDT plugin reconciliation failed", "error", usdtErr)
+	}
 
 	reconcileCtx, cancel := context.WithTimeout(context.Background(), expiryCheckTimeout)
 	recovered, err := s.paymentSvc.ReconcilePendingPaymentOrders(reconcileCtx)

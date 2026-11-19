@@ -4,25 +4,74 @@
   "title": "Sub2API Plugin Manifest v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "id", "name", "version", "requires", "capabilities", "runtimes", "ui", "files"],
+  "required": [
+    "schema_version",
+    "id",
+    "name",
+    "version",
+    "requires",
+    "capabilities",
+    "ui",
+    "files"
+  ],
   "properties": {
-    "schema_version": { "const": 1 },
-    "id": { "type": "string", "maxLength": 160, "pattern": "^[a-z0-9]+([._-][a-z0-9]+)+$" },
-    "name": { "type": "string", "minLength": 1, "maxLength": 160 },
-    "version": { "type": "string", "pattern": "^v?(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$" },
-    "description": { "type": "string" },
-    "author": { "type": "string", "maxLength": 160 },
+    "schema_version": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "maxLength": 160,
+      "pattern": "^[a-z0-9]+([._-][a-z0-9]+)+$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^v?(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
+    },
+    "description": {
+      "type": "string"
+    },
+    "author": {
+      "type": "string",
+      "maxLength": 160
+    },
     "requires": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["sub2api", "plugin_protocol", "transport_api", "ui_bridge"],
+      "required": [
+        "sub2api",
+        "plugin_protocol",
+        "transport_api",
+        "ui_bridge"
+      ],
       "properties": {
-        "sub2api": { "type": "string", "minLength": 1 },
-        "recommended_sub2api_version": { "type": "string" },
-        "tested_sub2api_versions": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
-        "plugin_protocol": { "const": 1 },
-        "transport_api": { "const": 1 },
-        "ui_bridge": { "const": 1 }
+        "sub2api": {
+          "type": "string",
+          "minLength": 1
+        },
+        "recommended_sub2api_version": {
+          "type": "string"
+        },
+        "tested_sub2api_versions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "plugin_protocol": {
+          "const": 1
+        },
+        "transport_api": {
+          "const": 1
+        },
+        "ui_bridge": {
+          "const": 1
+        }
       }
     },
     "capabilities": {
@@ -31,23 +80,49 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "platform", "account_type"],
+        "required": [
+          "id",
+          "platform",
+          "account_type"
+        ],
         "properties": {
-          "id": { "const": "openai.oauth.outbound_transport.v1" },
-          "platform": { "const": "openai" },
-          "account_type": { "const": "oauth" }
+          "id": {
+            "enum": [
+              "openai.oauth.outbound_transport.v1",
+              "website.support_widget.v1",
+              "payment.usdt_trc20.v1"
+            ]
+          },
+          "platform": {
+            "enum": [
+              "openai",
+              "website",
+              "payment"
+            ]
+          },
+          "account_type": {
+            "enum": [
+              "oauth",
+              "none"
+            ]
+          }
         }
       }
     },
     "runtimes": {
       "type": "object",
-      "minProperties": 1,
       "patternProperties": {
         "^[a-z0-9]+-[a-z0-9]+$": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["path"],
-          "properties": { "path": { "$ref": "#/$defs/safePath" } }
+          "required": [
+            "path"
+          ],
+          "properties": {
+            "path": {
+              "$ref": "#/$defs/safePath"
+            }
+          }
         }
       },
       "additionalProperties": false
@@ -55,14 +130,39 @@
     "ui": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["entrypoint"],
-      "properties": { "entrypoint": { "type": "string", "pattern": "^ui/.+" } }
+      "required": [
+        "entrypoint"
+      ],
+      "properties": {
+        "entrypoint": {
+          "type": "string",
+          "pattern": "^ui/.+"
+        }
+      }
     },
     "files": {
       "type": "object",
       "minProperties": 2,
-      "propertyNames": { "$ref": "#/$defs/safePath" },
-      "additionalProperties": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      "propertyNames": {
+        "$ref": "#/$defs/safePath"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      }
+    },
+    "public_ui": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entrypoint"
+      ],
+      "properties": {
+        "entrypoint": {
+          "type": "string",
+          "pattern": "^public/.+\\.html$"
+        }
+      }
     }
   },
   "$defs": {
@@ -71,5 +171,115 @@
       "minLength": 1,
       "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "properties": {
+                "id": {
+                  "const": "website.support_widget.v1"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "public_ui"
+        ],
+        "properties": {
+          "capabilities": {
+            "minItems": 1,
+            "maxItems": 1,
+            "items": {
+              "properties": {
+                "id": {
+                  "const": "website.support_widget.v1"
+                },
+                "platform": {
+                  "const": "website"
+                },
+                "account_type": {
+                  "const": "none"
+                }
+              }
+            }
+          },
+          "runtimes": {
+            "maxProperties": 0
+          },
+          "files": {
+            "propertyNames": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/safePath"
+                },
+                {
+                  "pattern": "^(ui|public)/.+\\.(html|js|css|json|svg|png|jpg|jpeg|webp|ico|woff|woff2)$"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "else": {
+        "required": [
+          "runtimes"
+        ],
+        "not": {
+          "required": [
+            "public_ui"
+          ]
+        },
+        "properties": {
+          "capabilities": {
+            "oneOf": [
+              {
+                "items": {
+                  "properties": {
+                    "id": {
+                      "const": "openai.oauth.outbound_transport.v1"
+                    },
+                    "platform": {
+                      "const": "openai"
+                    },
+                    "account_type": {
+                      "const": "oauth"
+                    }
+                  }
+                }
+              },
+              {
+                "minItems": 1,
+                "maxItems": 1,
+                "items": {
+                  "properties": {
+                    "id": {
+                      "const": "payment.usdt_trc20.v1"
+                    },
+                    "platform": {
+                      "const": "payment"
+                    },
+                    "account_type": {
+                      "const": "none"
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "runtimes": {
+            "minProperties": 1
+          }
+        }
+      }
+    }
+  ]
 }

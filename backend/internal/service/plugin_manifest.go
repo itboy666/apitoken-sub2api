@@ -2,9 +2,12 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path"
 	"regexp"
 	"runtime"
 	"sort"
@@ -16,6 +19,8 @@ import (
 
 const (
 	PluginCapabilityOpenAIOAuthOutbound = "openai.oauth.outbound_transport.v1"
+	PluginCapabilityUSDTTRC20           = "payment.usdt_trc20.v1"
+	PluginCapabilitySupportWidget       = "website.support_widget.v1"
 	PluginStateDisabled                 = "disabled"
 	PluginStateStarting                 = "starting"
 	PluginStateEnabled                  = "enabled"
@@ -39,8 +44,9 @@ type PluginManifest struct {
 	Author        string                   `json:"author,omitempty"`
 	Requires      PluginRequirements       `json:"requires"`
 	Capabilities  []PluginCapability       `json:"capabilities"`
-	Runtimes      map[string]PluginRuntime `json:"runtimes"`
+	Runtimes      map[string]PluginRuntime `json:"runtimes,omitempty"`
 	UI            PluginUIManifest         `json:"ui"`
+	PublicUI      *PluginUIManifest        `json:"public_ui,omitempty"`
 	Files         map[string]string        `json:"files"`
 }
 
@@ -168,14 +174,29 @@ func (m PluginManifest) Validate() error {
 	if len(m.Capabilities) == 0 {
 		return errors.New("插件必须声明至少一个能力")
 	}
-	for _, capability := range m.Capabilities {
-		if capability.ID != PluginCapabilityOpenAIOAuthOutbound || capability.Platform != PlatformOpenAI || capability.AccountType != AccountTypeOAuth {
-			return fmt.Errorf("初期仅支持能力 %s", PluginCapabilityOpenAIOAuthOutbound)
+	static := m.IsSupportWidget()
+	var runtimeEntry PluginRuntime
+	if static {
+		if len(m.Runtimes) != 0 {
+			return errors.New("网站客服插件不能声明进程运行时")
 		}
-	}
-	runtimeEntry, ok := m.Runtimes[m.RuntimeKey()]
-	if !ok || !safePluginRelativePath(runtimeEntry.Path) {
-		return fmt.Errorf("插件不支持当前运行平台 %s", m.RuntimeKey())
+		if m.PublicUI == nil || !safePluginRelativePath(m.PublicUI.Entrypoint) || !strings.HasPrefix(m.PublicUI.Entrypoint, "public/") || path.Ext(m.PublicUI.Entrypoint) != ".html" {
+			return errors.New("网站客服插件的公开入口必须是 public/ 目录中的 HTML")
+		}
+	} else {
+		if m.PublicUI != nil {
+			return errors.New("出站插件不能声明公开网站界面")
+		}
+		for _, capability := range m.Capabilities {
+			if !m.IsPaymentPlugin() && (capability.ID != PluginCapabilityOpenAIOAuthOutbound || capability.Platform != PlatformOpenAI || capability.AccountType != AccountTypeOAuth) {
+				return errors.New("插件能力或范围不受支持；网站客服插件必须仅声明 website.support_widget.v1 / website / none")
+			}
+		}
+		var ok bool
+		runtimeEntry, ok = m.Runtimes[m.RuntimeKey()]
+		if !ok || !safePluginRelativePath(runtimeEntry.Path) {
+			return fmt.Errorf("插件不支持当前运行平台 %s", m.RuntimeKey())
+		}
 	}
 	if !safePluginRelativePath(m.UI.Entrypoint) || !strings.HasPrefix(m.UI.Entrypoint, "ui/") {
 		return errors.New("插件 UI 入口必须位于 ui/ 目录")
@@ -184,11 +205,15 @@ func (m PluginManifest) Validate() error {
 		return errors.New("插件清单必须声明文件哈希")
 	}
 	for path, hash := range m.Files {
-		if !safePluginRelativePath(path) || !regexp.MustCompile(`^[a-f0-9]{64}$`).MatchString(hash) {
+		if !safePluginRelativePath(path) || !regexp.MustCompile(`^[a-f0-9]{64}$`).MatchString(hash) || (static && !safeWebsitePluginFile(path)) {
 			return fmt.Errorf("插件文件声明无效: %s", path)
 		}
 	}
-	if _, ok := m.Files[runtimeEntry.Path]; !ok {
+	if static {
+		if _, ok := m.Files[m.PublicUI.Entrypoint]; !ok {
+			return errors.New("公开入口未包含在文件哈希声明中")
+		}
+	} else if _, ok := m.Files[runtimeEntry.Path]; !ok {
 		return errors.New("运行时二进制未包含在文件哈希声明中")
 	}
 	if _, ok := m.Files[m.UI.Entrypoint]; !ok {
@@ -211,4 +236,36 @@ func (m PluginManifest) SortedCapabilities() []PluginCapability {
 	out := append([]PluginCapability(nil), m.Capabilities...)
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
+}
+
+// IsSupportWidget identifies a data-only capability. It never grants an account
+// directory, outbound route, or native process runtime.
+func (m PluginManifest) IsSupportWidget() bool {
+	return len(m.Capabilities) == 1 && m.Capabilities[0].ID == PluginCapabilitySupportWidget &&
+		m.Capabilities[0].Platform == "website" && m.Capabilities[0].AccountType == "none"
+}
+
+func safeWebsitePluginFile(name string) bool {
+	clean, err := normalizePluginArchivePath(name)
+	if err != nil || clean != name || !(strings.HasPrefix(name, "ui/") || strings.HasPrefix(name, "public/")) {
+		return false
+	}
+	switch path.Ext(name) {
+	case ".html", ".js", ".css", ".json", ".svg", ".png", ".jpg", ".jpeg", ".webp", ".ico", ".woff", ".woff2":
+		return true
+	default:
+		return false
+	}
+}
+
+// StaticIdentity binds CAS and local caches to all metadata and every asset hash,
+// including same-version uploads whose configuration page did not change.
+func (m PluginManifest) StaticIdentity() string {
+	raw, _ := json.Marshal(m)
+	digest := sha256.Sum256(raw)
+	return hex.EncodeToString(digest[:])
+}
+
+func (m PluginManifest) IsPaymentPlugin() bool {
+	return len(m.Capabilities) == 1 && m.Capabilities[0].ID == PluginCapabilityUSDTTRC20 && m.Capabilities[0].Platform == "payment" && m.Capabilities[0].AccountType == "none"
 }

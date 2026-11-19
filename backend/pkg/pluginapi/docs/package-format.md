@@ -14,6 +14,8 @@ ui/assets/...
 
 所有运行时和 UI 文件必须出现在 `manifest.files`，值为小写十六进制 SHA-256。清单和签名文件自身不写入 `files`。
 
+网站客服静态插件使用 `ui/index.html` 作为管理配置页、`public/index.html` 作为访客界面；它不包含 `runtimes/`。清单额外声明 `public_ui.entrypoint`，并且只声明 `website.support_widget.v1 / website / none` 能力。详见[网站客服插件](website-widgets.md)。
+
 包不允许绝对路径、父目录跳转、重复路径、符号链接、未声明文件或缺失文件。宿主还限制上传大小、解压后大小和文件数量。
 
 ## 清单
@@ -43,3 +45,5 @@ ui/assets/...
 签名对象是 `manifest.json` 的精确原始字节。发布者私钥不得进入插件包、源码仓库或 Sub2API 运行环境。部署者只配置 Base64 Ed25519 公钥。
 
 默认生产配置拒绝未签名包。官方 OpenAI Transport 使用宿主内置公钥验签，不需要配置；其他发布者仍需配置 `trusted_publishers`。`allow_unsigned` 只用于开发者自己构建的本地包。
+
+APIToken 定制宿主还固定信任 `apitoken-support-widget-v1` 发布者公钥，仅用于插件 ID `local.apitoken.support-widget` 的静态客服能力；配置不能覆盖该公钥，该密钥也不能授权其他插件 ID 或原生出站能力。

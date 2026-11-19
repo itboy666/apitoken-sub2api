@@ -142,6 +142,18 @@ func (h *PluginHandler) GetConfig(c *gin.Context) {
 }
 
 func (h *PluginHandler) SaveConfig(c *gin.Context) {
+	h.writeConfig(c, false)
+}
+
+func (h *PluginHandler) RecoverConfig(c *gin.Context) {
+	if c.GetHeader("X-Plugin-Config-Recovery") != "confirmed" {
+		response.BadRequest(c, "请先明确确认重新填写插件配置")
+		return
+	}
+	h.writeConfig(c, true)
+}
+
+func (h *PluginHandler) writeConfig(c *gin.Context, recoverConfig bool) {
 	id, ok := pluginIDParam(c)
 	if !ok {
 		return
@@ -162,7 +174,12 @@ func (h *PluginHandler) SaveConfig(c *gin.Context) {
 		response.BadRequest(c, "插件配置无法序列化")
 		return
 	}
-	saved, err := h.manager.SaveConfig(c.Request.Context(), id, raw)
+	var saved json.RawMessage
+	if recoverConfig {
+		saved, err = h.manager.RecoverWebsiteConfig(c.Request.Context(), id, raw)
+	} else {
+		saved, err = h.manager.SaveConfig(c.Request.Context(), id, raw)
+	}
 	if err != nil {
 		response.BadRequest(c, err.Error())
 		return

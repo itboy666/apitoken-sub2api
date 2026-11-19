@@ -2,14 +2,15 @@
   <AuthLayout>
     <div class="space-y-6">
       <!-- Title -->
-      <div class="text-center">
-        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+      <div class="auth-view-header">
+        <h1 class="auth-view-title">
           {{ t('auth.forgotPasswordTitle') }}
-        </h2>
-        <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">
-          {{ t('auth.forgotPasswordHint') }}
+        </h1>
+        <p class="auth-view-subtitle">
+          {{ passwordResetUnavailable ? unavailableCopy.hint : t('auth.forgotPasswordHint') }}
         </p>
       </div>
+      <p v-if="errorMessage" class="auth-api-error" role="alert">{{ errorMessage }}</p>
 
       <!-- Success State -->
       <div v-if="isSubmitted" class="space-y-6">
@@ -19,9 +20,9 @@
               <Icon name="checkCircle" size="lg" class="text-green-600 dark:text-green-400" />
             </div>
             <div>
-              <h3 class="text-lg font-semibold text-green-800 dark:text-green-200">
+              <h2 class="text-lg font-semibold text-green-800 dark:text-green-200">
                 {{ t('auth.resetEmailSent') }}
-              </h3>
+              </h2>
               <p class="mt-2 text-sm text-green-700 dark:text-green-300">
                 {{ t('auth.resetEmailSentHint') }}
               </p>
@@ -38,6 +39,12 @@
             {{ t('auth.backToLogin') }}
           </router-link>
         </div>
+      </div>
+
+      <div v-else-if="passwordResetUnavailable" class="auth-unavailable" role="status">
+        <Icon name="lock" size="lg" aria-hidden="true" />
+        <h2>{{ unavailableCopy.title }}</h2>
+        <p>{{ unavailableCopy.description }}</p>
       </div>
 
       <!-- Form State -->
@@ -62,8 +69,11 @@
               class="input pl-11"
               :class="{ 'input-error': errors.email }"
               :placeholder="t('auth.emailPlaceholder')"
+              :aria-invalid="!!errors.email"
+              :aria-describedby="errors.email ? 'email-error' : undefined"
             />
           </div>
+          <p v-if="errors.email" id="email-error" class="auth-field-error">{{ errors.email }}</p>
         </div>
 
         <!-- Turnstile Widget -->
@@ -141,7 +151,16 @@ import TurnstileWidget from '@/components/CaptchaChallenge.vue'
 import { useAppStore } from '@/stores'
 import { getPublicSettings, forgotPassword } from '@/api/auth'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
+const unavailableCopy = computed(() => locale?.value?.startsWith('zh') ? {
+  hint: '需要找回账户？我们为你指引下一步。',
+  title: '暂未开放自助找回',
+  description: '本站暂未开启邮件找回密码。请联系站点管理员协助恢复账户，或返回登录页使用其他已绑定的登录方式。'
+} : {
+  hint: 'Need access to your account? Here is the next step.',
+  title: 'Self-service recovery is unavailable',
+  description: 'Email password recovery is not enabled on this site. Contact the site administrator for help, or return to sign in with another method already linked to your account.'
+})
 
 // ==================== Stores ====================
 
@@ -152,6 +171,10 @@ const appStore = useAppStore()
 const isLoading = ref<boolean>(false)
 const isSubmitted = ref<boolean>(false)
 const errorMessage = ref<string>('')
+const passwordResetUnavailable = ref(
+  appStore.cachedPublicSettings?.password_reset_enabled === false ||
+  appStore.cachedPublicSettings?.email_verify_enabled === false
+)
 
 // Public settings
 const turnstileEnabled = ref<boolean>(false)
@@ -207,6 +230,7 @@ watch(validationToastMessage, (value, previousValue) => {
 onMounted(async () => {
   try {
     const settings = await getPublicSettings()
+    passwordResetUnavailable.value = settings.password_reset_enabled === false || settings.email_verify_enabled === false
     turnstileEnabled.value = settings.turnstile_enabled
     turnstileSiteKey.value = settings.turnstile_site_key || ''
     tencentCaptchaEnabled.value = settings.tencent_captcha_enabled === true
@@ -290,6 +314,8 @@ function validateForm(): boolean {
 async function handleSubmit(): Promise<void> {
   errorMessage.value = ''
 
+  if (passwordResetUnavailable.value) return
+
   if (!validateForm()) {
     return
   }
@@ -333,6 +359,17 @@ async function handleSubmit(): Promise<void> {
 </script>
 
 <style scoped>
+.auth-unavailable {
+  padding: 28px;
+  border: 1px solid var(--auth-border);
+  border-radius: 14px;
+  color: var(--auth-muted);
+  background: var(--auth-surface);
+}
+.auth-unavailable > svg { color: var(--auth-accent); }
+.auth-unavailable h2 { margin-top: 18px; color: var(--auth-ink); font-size: 17px; font-weight: 600; }
+.auth-unavailable p { margin-top: 12px; font-size: 14px; line-height: 1.85; }
+
 .fade-enter-active,
 .fade-leave-active {
   transition: all 0.3s ease;

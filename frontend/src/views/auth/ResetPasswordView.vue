@@ -2,14 +2,15 @@
   <AuthLayout>
     <div class="space-y-6">
       <!-- Title -->
-      <div class="text-center">
-        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+      <div class="auth-view-header">
+        <h1 class="auth-view-title">
           {{ t('auth.resetPasswordTitle') }}
-        </h2>
-        <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">
+        </h1>
+        <p class="auth-view-subtitle">
           {{ t('auth.resetPasswordHint') }}
         </p>
       </div>
+      <p v-if="errorMessage" class="auth-api-error" role="alert">{{ errorMessage }}</p>
 
       <!-- Invalid Link State -->
       <div v-if="isInvalidLink" class="space-y-6">
@@ -19,9 +20,9 @@
               <Icon name="exclamationCircle" size="lg" class="text-amber-600 dark:text-amber-400" />
             </div>
             <div>
-              <h3 class="text-lg font-semibold text-amber-800 dark:text-amber-200">
+              <h2 class="text-lg font-semibold text-amber-800 dark:text-amber-200">
                 {{ t('auth.invalidResetLink') }}
-              </h3>
+              </h2>
               <p class="mt-2 text-sm text-amber-700 dark:text-amber-300">
                 {{ t('auth.invalidResetLinkHint') }}
               </p>
@@ -47,9 +48,9 @@
               <Icon name="checkCircle" size="lg" class="text-green-600 dark:text-green-400" />
             </div>
             <div>
-              <h3 class="text-lg font-semibold text-green-800 dark:text-green-200">
+              <h2 class="text-lg font-semibold text-green-800 dark:text-green-200">
                 {{ t('auth.passwordResetSuccess') }}
-              </h3>
+              </h2>
               <p class="mt-2 text-sm text-green-700 dark:text-green-300">
                 {{ t('auth.passwordResetSuccessHint') }}
               </p>
@@ -109,16 +110,21 @@
               class="input pl-11 pr-11"
               :class="{ 'input-error': errors.password }"
               :placeholder="t('auth.newPasswordPlaceholder')"
+              :aria-invalid="!!errors.password"
+              :aria-describedby="errors.password ? 'password-error' : undefined"
             />
             <button
               type="button"
               @click="showPassword = !showPassword"
-              class="absolute inset-y-0 right-0 flex items-center pr-3.5 text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-dark-300"
+              :aria-label="showPassword ? passwordVisibility.hide : passwordVisibility.show"
+              :aria-pressed="showPassword"
+              class="auth-password-toggle absolute inset-y-0 right-0 flex items-center pr-3.5 text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-dark-300"
             >
               <Icon v-if="showPassword" name="eyeOff" size="md" />
               <Icon v-else name="eye" size="md" />
             </button>
           </div>
+          <p v-if="errors.password" id="password-error" class="auth-field-error">{{ errors.password }}</p>
         </div>
 
         <!-- Confirm Password Input -->
@@ -140,16 +146,21 @@
               class="input pl-11 pr-11"
               :class="{ 'input-error': errors.confirmPassword }"
               :placeholder="t('auth.confirmPasswordPlaceholder')"
+              :aria-invalid="!!errors.confirmPassword"
+              :aria-describedby="errors.confirmPassword ? 'confirmPassword-error' : undefined"
             />
             <button
               type="button"
               @click="showConfirmPassword = !showConfirmPassword"
-              class="absolute inset-y-0 right-0 flex items-center pr-3.5 text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-dark-300"
+              :aria-label="showConfirmPassword ? passwordVisibility.hide : passwordVisibility.show"
+              :aria-pressed="showConfirmPassword"
+              class="auth-password-toggle absolute inset-y-0 right-0 flex items-center pr-3.5 text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-dark-300"
             >
               <Icon v-if="showConfirmPassword" name="eyeOff" size="md" />
               <Icon v-else name="eye" size="md" />
             </button>
           </div>
+          <p v-if="errors.confirmPassword" id="confirmPassword-error" class="auth-field-error">{{ errors.confirmPassword }}</p>
         </div>
 
         <!-- Submit Button -->
@@ -208,7 +219,10 @@ import Icon from '@/components/icons/Icon.vue'
 import { useAppStore } from '@/stores'
 import { resetPassword } from '@/api/auth'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
+const passwordVisibility = computed(() => locale?.value?.startsWith('zh')
+  ? { show: '显示密码', hide: '隐藏密码' }
+  : { show: 'Show password', hide: 'Hide password' })
 
 // ==================== Router & Stores ====================
 

@@ -110,6 +110,9 @@ func (s *PaymentService) confirmPayment(ctx context.Context, oid int64, tradeNo 
 		slog.Error("order not found", "orderID", oid)
 		return nil
 	}
+	if o.PaymentType == PaymentTypeUSDTPlugin {
+		return errors.New("USDT plugin orders require verified chain reconciliation")
+	}
 	instanceProviderKey := ""
 	if inst, instErr := s.getOrderProviderInstance(ctx, o); instErr == nil && inst != nil {
 		instanceProviderKey = inst.ProviderKey
@@ -187,6 +190,11 @@ func expectedNotificationProviderKey(registry *payment.Registry, orderPaymentTyp
 }
 
 func (s *PaymentService) toPaid(ctx context.Context, o *dbent.PaymentOrder, tradeNo string, paid float64, pk string) error {
+	if o.PaymentType == PaymentTypeUSDTPlugin {
+		if err := s.requireUSDTClaim(ctx, o, tradeNo, paid); err != nil {
+			return err
+		}
+	}
 	if orderHasCoupon(o) {
 		return s.confirmCouponOrder(ctx, o, tradeNo, paid, pk)
 	}
@@ -224,6 +232,9 @@ func (s *PaymentService) toPaid(ctx context.Context, o *dbent.PaymentOrder, trad
 // One policy for canonical and coupon confirmations. Coupon callers evaluate
 // this predicate while holding the order row lock in their financial transaction.
 func paymentRecoveryEligibility(ctx context.Context, o *dbent.PaymentOrder, pk string, now time.Time) predicate.PaymentOrder {
+	if o.PaymentType == PaymentTypeUSDTPlugin {
+		return paymentorder.And(paymentorder.StatusIn(OrderStatusPending, OrderStatusExpired), paymentorder.ExpiresAtGTE(now.Add(-usdtRecoveryWindow)))
+	}
 	grace := now.Add(-paymentGraceMinutes * time.Minute)
 	if pk == payment.TypeBEpusdt && psSnapshotStringValue(o.ProviderSnapshot["collection_mode"]) == "embedded" {
 		// Match the collection engine's three-hour historical scan window.

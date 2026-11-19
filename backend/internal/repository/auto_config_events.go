@@ -76,6 +76,18 @@ func (r *settingRepository) saveOAuthAutoConfig(ctx context.Context, value strin
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	// Hold selected group rows before the setting lock, matching deletion's
+	// groups -> settings order. Recheck after any concurrent deletion commits.
+	var groupIDs []int64
+	if config.Enabled {
+		groupIDs = append(groupIDs, config.GroupIDs...)
+	}
+	if config.UpgradeEnabled {
+		groupIDs = append(groupIDs, config.UpgradeGroupIDs...)
+	}
+	if err := lockLiveGroups(ctx, tx.Client(), groupIDs); err != nil {
+		return err
+	}
 	// Serialize the absent-row case too; existing readers use the row lock.
 	if _, err = tx.Client().ExecContext(ctx, "SELECT pg_advisory_xact_lock(681705431)"); err != nil {
 		return err

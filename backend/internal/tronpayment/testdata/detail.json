@@ -1,0 +1,34 @@
+{
+  "contractRet": "SUCCESS",
+  "contractType": 31,
+  "confirmed": true,
+  "trc20TransferInfo": [
+    {
+      "icon_url": "https://static.tronscan.org/production/logo/usdtlogo.png",
+      "symbol": "USDT",
+      "level": "2",
+      "to_address": "TWwECvk3qmaXWvQd6FrGU5rK6AJ78dyFB9",
+      "tokenType2": "trc20",
+      "contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+      "type": "Transfer",
+      "usdValue": {
+        "current": {
+          "amountInUsd": "127.866784238148288",
+          "priceInUsd": "0.9989592518605335"
+        }
+      },
+      "decimals": 6,
+      "name": "Tether USD",
+      "vip": true,
+      "tokenType": "trc20",
+      "from_address": "TFBu1Z7SdGyWxLrKyov8GuKttoJRU3xKox",
+      "amount_str": "128000000",
+      "status": 0
+    }
+  ],
+  "block": 88140582,
+  "timestamp": 1795095819000,
+  "revert": false,
+  "confirmations": 913,
+  "hash": "82acc48a8b1f43c251fbca8be28a5761878a10dac86d4d4593d58fb0c54ee533"
+}

@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>USDT · TRC20 支付配置</title><link rel="stylesheet" href="style.css"></head>
+<body><main>
+ <header><span class="eyebrow">APITOKEN / PAYMENT</span><div class="heading"><h1>USDT · TRC20</h1><span class="badge">人民币计价</span></div><p>链上收款，确认后自动充值。</p></header>
+ <section class="rate" aria-label="结算汇率"><div><span>固定结算汇率</span><strong>1 <small>USDT</small><i> = </i>6.5 <small>CNY</small></strong></div><span class="rate-note">沿用网站充值规则<br>金额以订单为准</span></section>
+ <p id="message" role="status" tabindex="-1">正在读取配置…</p>
+ <form id="form"><fieldset id="fields" disabled>
+  <label for="wallet">TRON 收款地址</label><input id="wallet" autocomplete="off" spellcheck="false" placeholder="以 T 开头的 TRON 地址" aria-describedby="wallet-help" required><p class="help" id="wallet-help">仅填写你的收款地址。请先处理所有待支付订单，再更换钱包。</p>
+  <label for="api-key">TronScan API Key <span id="key-state"></span></label><input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="填写 API Key" aria-describedby="key-help"><p class="help" id="key-help">在服务器加密保存，不向付款用户公开。已保存时留空表示保留原 Key。</p>
+  <div class="actions"><button id="save" type="button">保存配置</button><button id="test" class="secondary" type="button">测试 TronScan 连接</button></div>
+ </fieldset></form>
+ <section class="checks" aria-label="到账规则"><h2>只为核实的 USDT 入账</h2><ul><li>固定核对官方 USDT 合约、收款地址和精确金额</li><li>交易成功，且至少获得 20 次链上确认</li><li>同一交易只能使用一次；TRX 与同名假币不入账</li></ul><details><summary>订单金额与超时规则</summary><p>宿主 .7 起：人民币应付金额 ÷ 6.5，向上保留 2 位小数，再随机加 0.00–0.09 USDT；有效期内金额冲突时逐次增加 0.01 USDT。尾数不增加余额；取消或支付后仍保留金额至原到期时间。旧订单保持原精确金额。兼容宿主 .6 时仍使用原六位小数规则。</p><p>仅接受订单有效期内发生的转账。确认延迟可在到期后 3 小时内补核验；已取消、超时转账或金额不符需要人工核对。插件不持有私钥，不发起转账或自动退款。</p></details></section>
+ <footer>在插件管理中启用后，网站将显示 USDT 付款入口。停用会暂停链上核验。</footer>
+</main><script src="config.js"></script></body></html>

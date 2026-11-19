@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "id": "local.apitoken.support-widget",
+  "name": "APIToken 客服浮窗",
+  "version": "1.0.5",
+  "description": "独立的客服与 QQ 群浮窗，包含配置界面、手机布局与深色模式。",
+  "author": "APIToken",
+  "requires": {
+    "sub2api": ">=2.23.0-apitoken.5 <=2.23.0-apitoken.7",
+    "recommended_sub2api_version": "2.23.0-apitoken.7",
+    "tested_sub2api_versions": [
+      "2.23.0-apitoken.5",
+      "2.23.0-apitoken.6",
+      "2.23.0-apitoken.7"
+    ],
+    "plugin_protocol": 1,
+    "transport_api": 1,
+    "ui_bridge": 1
+  },
+  "capabilities": [
+    {
+      "id": "website.support_widget.v1",
+      "platform": "website",
+      "account_type": "none"
+    }
+  ],
+  "runtimes": {},
+  "ui": {
+    "entrypoint": "ui/index.html"
+  },
+  "public_ui": {
+    "entrypoint": "public/index.html"
+  }
+}

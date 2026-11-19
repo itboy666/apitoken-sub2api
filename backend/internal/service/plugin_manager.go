@@ -43,11 +43,12 @@ type pluginRoute struct {
 
 // PluginManager 管理插件安装、配置、进程生命周期和 OpenAI OAuth 能力绑定。
 type PluginManager struct {
-	repo      PluginRepository
-	encryptor SecretEncryptor
-	cfg       *config.Config
-	hostInfo  PluginHostInfo
-	installer *PluginPackageInstaller
+	paymentConfigGuard func(context.Context, json.RawMessage, json.RawMessage) error
+	repo               PluginRepository
+	encryptor          SecretEncryptor
+	cfg                *config.Config
+	hostInfo           PluginHostInfo
+	installer          *PluginPackageInstaller
 	// kvStore 为运行中的插件提供通用宿主键值存储；为 nil 时不向插件暴露宿主服务。
 	kvStore PluginKVStore
 	// accountDirectory 为声明了对应能力的插件提供账号目录与出站身份解析（敏感能力）；
@@ -150,6 +151,10 @@ func (m *PluginManager) List(ctx context.Context) ([]*PluginInstallation, error)
 	defer m.mu.Unlock()
 	route := m.route.Load()
 	for _, installation := range plugins {
+		if installation.Manifest.IsSupportWidget() {
+			decorateWebsitePlugin(installation, m.hostInfo)
+			continue
+		}
 		installation.Compatibility = EvaluatePluginCompatibility(installation.Manifest, m.hostInfo)
 		if runtime := m.runtimes[installation.ID]; runtime != nil && !runtime.client.Exited() {
 			installation.RuntimeHealthy = true
@@ -168,6 +173,10 @@ func (m *PluginManager) Get(ctx context.Context, id int64) (*PluginInstallation,
 	installation, err := m.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+	if installation.Manifest.IsSupportWidget() {
+		decorateWebsitePlugin(installation, m.hostInfo)
+		return installation, nil
 	}
 	installation.Compatibility = EvaluatePluginCompatibility(installation.Manifest, m.hostInfo)
 	m.mu.Lock()
@@ -191,7 +200,7 @@ func (m *PluginManager) Install(ctx context.Context, reader io.Reader, installed
 	}
 	var previous *PluginInstallation
 	if existing, getErr := m.repo.GetByKey(ctx, packageInfo.PluginKey); getErr == nil {
-		if existing.State == PluginStateEnabled || hasEnabledOpenAIBinding(existing.Bindings) {
+		if existing.State == PluginStateEnabled || hasEnabledPluginBinding(existing.Bindings) {
 			cleanupErr := m.cleanupInstallationFiles(packageInfo)
 			return nil, errors.Join(errors.New("请先停用当前插件，再上传同 ID 的新版本"), cleanupErr)
 		}
@@ -277,6 +286,9 @@ func (m *PluginManager) reconcileOnce(ctx context.Context) error {
 		return fmt.Errorf("读取插件启用状态: %w", err)
 	}
 	m.cleanupStaleLocalInstallations(installations)
+	if err := m.reconcilePaymentPlugins(ctx, installations); err != nil {
+		return err
+	}
 	var enabled *PluginInstallation
 	for _, installation := range installations {
 		if !hasEnabledOpenAIBinding(installation.Bindings) {
@@ -372,6 +384,9 @@ func (m *PluginManager) reconcileOnce(ctx context.Context) error {
 	m.mu.Lock()
 	stale := make([]*pluginRuntime, 0, len(m.runtimes))
 	for id, candidate := range m.runtimes {
+		if candidate.installation.Manifest.IsPaymentPlugin() {
+			continue
+		}
 		if candidate != runtime {
 			candidate.draining.Store(true)
 			stale = append(stale, candidate)
@@ -409,6 +424,9 @@ func (m *PluginManager) detachAllRuntimes() []*pluginRuntime {
 	defer m.mu.Unlock()
 	runtimes := make([]*pluginRuntime, 0, len(m.runtimes))
 	for id, runtime := range m.runtimes {
+		if runtime.installation.Manifest.IsPaymentPlugin() {
+			continue
+		}
 		runtime.draining.Store(true)
 		runtimes = append(runtimes, runtime)
 		delete(m.runtimes, id)
@@ -421,6 +439,9 @@ func (m *PluginManager) publishUnavailableRoute(pluginID int64, rollout int, mes
 	m.mu.Lock()
 	stale := make([]*pluginRuntime, 0, len(m.runtimes))
 	for id, runtime := range m.runtimes {
+		if runtime.installation.Manifest.IsPaymentPlugin() {
+			continue
+		}
 		runtime.draining.Store(true)
 		stale = append(stale, runtime)
 		delete(m.runtimes, id)
@@ -536,6 +557,9 @@ func verifyLocalPluginBinary(installation *PluginInstallation, root string) erro
 	if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 		return errors.New("插件安装目录不在受管目录内")
 	}
+	if installation.Manifest.IsSupportWidget() {
+		return verifyLocalWebsitePlugin(installation)
+	}
 	runtimeEntry, ok := installation.Manifest.Runtimes[installation.Manifest.RuntimeKey()]
 	if !ok {
 		return errors.New("插件未声明当前平台运行时")
@@ -566,10 +590,13 @@ func (m *PluginManager) Enable(ctx context.Context, id int64, acceptUntested boo
 	if err != nil {
 		return nil, err
 	}
-	if active := m.route.Load(); active != nil && active.pluginID != id {
+	if installation.Manifest.IsSupportWidget() {
+		return m.enableWebsitePlugin(ctx, installation, acceptUntested)
+	}
+	if active := m.route.Load(); active != nil && active.pluginID != id && !installation.Manifest.IsPaymentPlugin() {
 		return nil, errors.New("OpenAI OAuth 出站能力已有启用插件，请先停用当前插件")
 	}
-	if installation.State == PluginStateEnabled && hasEnabledOpenAIBinding(installation.Bindings) {
+	if installation.State == PluginStateEnabled && hasEnabledPluginBinding(installation.Bindings) {
 		installation.Compatibility = EvaluatePluginCompatibility(installation.Manifest, m.hostInfo)
 		m.mu.Lock()
 		runtime := m.runtimes[id]
@@ -666,7 +693,7 @@ func (m *PluginManager) Delete(ctx context.Context, id int64) error {
 		m.mu.Unlock()
 		return err
 	}
-	if installation.State == PluginStateEnabled || hasEnabledOpenAIBinding(installation.Bindings) {
+	if installation.State == PluginStateEnabled || hasEnabledPluginBinding(installation.Bindings) {
 		m.mu.Unlock()
 		return errors.New("请先停用插件，再执行卸载")
 	}
@@ -693,7 +720,15 @@ func (m *PluginManager) GetConfig(ctx context.Context, id int64) (json.RawMessag
 	if err != nil {
 		return nil, err
 	}
-	return m.decryptConfig(installation)
+	if installation.Manifest.IsSupportWidget() {
+		_, canonical, err := m.websiteConfig(installation)
+		return canonical, err
+	}
+	raw, err := m.decryptConfig(installation)
+	if installation.Manifest.IsPaymentPlugin() && err == nil {
+		return maskPaymentPluginConfig(raw)
+	}
+	return raw, err
 }
 
 func (m *PluginManager) SaveConfig(ctx context.Context, id int64, raw json.RawMessage) (json.RawMessage, error) {
@@ -706,9 +741,21 @@ func (m *PluginManager) SaveConfig(ctx context.Context, id int64, raw json.RawMe
 	if err != nil {
 		return nil, err
 	}
+	if installation.Manifest.IsSupportWidget() {
+		return m.saveWebsiteConfig(ctx, installation, raw)
+	}
 	previousConfig, err := m.decryptConfig(installation)
 	if err != nil {
 		return nil, err
+	}
+	if installation.Manifest.IsPaymentPlugin() {
+		raw, err = mergePaymentPluginSecret(raw, previousConfig)
+		if err == nil && m.paymentConfigGuard != nil {
+			err = m.paymentConfigGuard(ctx, previousConfig, raw)
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
 	var normalized any
 	if err := json.Unmarshal(raw, &normalized); err != nil {
@@ -764,6 +811,9 @@ func (m *PluginManager) SaveConfig(ctx context.Context, id int64, raw json.RawMe
 	if !temporary {
 		runtime.installation.ConfigEncrypted = encrypted
 	}
+	if installation.Manifest.IsPaymentPlugin() {
+		return maskPaymentPluginConfig(canonical)
+	}
 	return canonical, nil
 }
 
@@ -790,6 +840,9 @@ func (m *PluginManager) Test(ctx context.Context, id int64) (*pluginv1.TestConfi
 	installation, err := m.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+	if installation.Manifest.IsSupportWidget() {
+		return m.testWebsitePlugin(ctx, installation)
 	}
 	configJSON, err := m.decryptConfig(installation)
 	if err != nil {
@@ -827,8 +880,13 @@ func (m *PluginManager) Test(ctx context.Context, id int64) (*pluginv1.TestConfi
 // running simply reports "not running" with no status blob. This makes it safe to
 // serve from a lightweight, ungated, read-only endpoint used for status polling.
 func (m *PluginManager) Status(ctx context.Context, id int64) (*pluginv1.HealthResponse, error) {
-	if _, err := m.repo.GetByID(ctx, id); err != nil {
+	installation, err := m.repo.GetByID(ctx, id)
+	if err != nil {
 		return nil, err
+	}
+	if installation.Manifest.IsSupportWidget() {
+		decorateWebsitePlugin(installation, m.hostInfo)
+		return &pluginv1.HealthResponse{Healthy: installation.RuntimeHealthy, Message: installation.RuntimeMessage}, nil
 	}
 	m.mu.Lock()
 	runtime := m.runtimes[id]
@@ -861,7 +919,11 @@ func (m *PluginManager) CreateUIAssetToken(ctx context.Context, id int64, ttl ti
 		return "", time.Time{}, err
 	}
 	// 加用途前缀，避免复用同一 AES-GCM 密钥的其他密文被当作 UI 能力令牌。
-	encrypted, err := m.encryptor.Encrypt(pluginUITokenPrefix + string(raw))
+	encrypt := m.encryptor.Encrypt
+	if uiEncryptor, ok := m.encryptor.(PluginUIAssetEncryptor); ok {
+		encrypt = uiEncryptor.EncryptUIAssetToken
+	}
+	encrypted, err := encrypt(pluginUITokenPrefix + string(raw))
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("加密插件 UI 会话: %w", err)
 	}
@@ -876,7 +938,11 @@ func (m *PluginManager) ResolveUIAssetToken(token string) (int64, error) {
 	if err != nil {
 		return 0, errors.New("插件 UI 会话无效")
 	}
-	plaintext, err := m.encryptor.Decrypt(string(encrypted))
+	decrypt := m.encryptor.Decrypt
+	if uiEncryptor, ok := m.encryptor.(PluginUIAssetEncryptor); ok {
+		decrypt = uiEncryptor.DecryptUIAssetToken
+	}
+	plaintext, err := decrypt(string(encrypted))
 	if err != nil {
 		return 0, errors.New("插件 UI 会话无效")
 	}
@@ -1040,6 +1106,9 @@ func (m *PluginManager) publishRuntimeLocked(installation *PluginInstallation, r
 		old.kill()
 	}
 	m.runtimes[installation.ID] = runtime
+	if installation.Manifest.IsPaymentPlugin() {
+		return
+	}
 	m.route.Store(&pluginRoute{
 		pluginID:       installation.ID,
 		runtime:        runtime,

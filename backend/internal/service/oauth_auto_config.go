@@ -68,6 +68,10 @@ func DefaultOAuthAutoConfig() OAuthAutoConfig {
 	return OAuthAutoConfig{APIKeyDisposition: DefaultOAuthAPIKeyDispositionConfig(), OpenAIAPIKeyFallback: DefaultOpenAIAPIKeyFallbackConfig(), OpenAIDisableSchedulingOn4297dThresholdPercent: DefaultOpenAIDisableSchedulingOn4297dThresholdPercent, DegradationAction: DefaultOAuthDegradationConfig(), OpenAIWSMode: &wsMode, OpenAIWSSSEAcceleration: &wsSSEAcceleration, OpenAITwoFAAdmission: DefaultOpenAITwoFAAdmissionConfig(), ModelMappings: defaultOAuthModelMappings(PlatformOpenAI), ModelBilling: DefaultModelBillingConfig(), ExcelBPS: DefaultExcelBPSDefaults(), Platform: PlatformOpenAI, Priority: 50, LoadFactor: 1, Concurrency: 3, CostMultiplier: 0.07, GroupIDs: []int64{}, UpgradeGroupIDs: []int64{}, SuccessesPerStep: 20, UpgradeStep: 1, MaxConcurrency: 100, CooldownSeconds: 60}
 }
 func ValidateOAuthAutoConfig(c OAuthAutoConfig) error {
+	return validateOAuthAutoConfig(c, true)
+}
+
+func validateOAuthAutoConfig(c OAuthAutoConfig, requireInitialGroups bool) error {
 	if err := c.APIKeyDisposition.Validate(); err != nil {
 		return infraerrors.BadRequest("OAUTH_APIKEY_DISPOSITION_INVALID", err.Error())
 	}
@@ -114,7 +118,7 @@ func ValidateOAuthAutoConfig(c OAuthAutoConfig) error {
 	if c.SuccessesPerStep < 1 || c.SuccessesPerStep > 100000 || c.UpgradeStep < 1 || c.UpgradeStep > 1000 || c.MaxConcurrency < 1 || c.MaxConcurrency > 10000 || c.CooldownSeconds < 1 || c.CooldownSeconds > 86400 {
 		return bad("invalid concurrency upgrade settings")
 	}
-	if c.Enabled && len(c.GroupIDs) == 0 {
+	if requireInitialGroups && c.Enabled && len(c.GroupIDs) == 0 {
 		return bad("select initial account groups")
 	}
 	if c.UpgradeEnabled && len(c.UpgradeGroupIDs) == 0 {
@@ -166,7 +170,10 @@ func GetOAuthAutoConfig(ctx context.Context, repo SettingRepository) (OAuthAutoC
 			}
 		}
 	}
-	return c, ValidateOAuthAutoConfig(c)
+	// Deleting the last initial group leaves an enabled policy with no targets.
+	// Import then requires an explicit valid selection instead of default-binding.
+	// New saves still require initial groups via ValidateOAuthAutoConfig.
+	return c, validateOAuthAutoConfig(c, false)
 }
 func (s *SettingService) GetOAuthAutoConfig(ctx context.Context) (OAuthAutoConfig, error) {
 	if s == nil {
@@ -203,18 +210,24 @@ func (s *adminServiceImpl) ApplyOAuthAutoConfig(ctx context.Context, input *Crea
 	if !c.Enabled || c.Platform != input.Platform {
 		return nil
 	}
-	if err := ValidateObserverGroupBindings(ctx, c.GroupIDs); err != nil {
+	// Older versions left deleted IDs in this policy. Ignore only confirmed
+	// deletions; transient repository failures and disabled/moved groups must
+	// still fail closed. Never fall back to all groups or the platform default.
+	groups, err := resolveOAuthInitialGroups(ctx, s.groupRepo, c.Platform, c.GroupIDs, true)
+	if err != nil {
 		return err
 	}
-	// Validate at use time as a configured group may have been deleted or moved.
-	for _, id := range c.GroupIDs {
-		g, err := s.groupRepo.GetByID(ctx, id)
+	if len(groups) == 0 {
+		if len(input.GroupIDs) == 0 {
+			return infraerrors.BadRequest("AUTO_CONFIG_GROUPS_REQUIRED", "automatic configuration groups were deleted; select an active import group or update automatic configuration")
+		}
+		groups, err = resolveOAuthInitialGroups(ctx, s.groupRepo, c.Platform, input.GroupIDs, false)
 		if err != nil {
 			return err
 		}
-		if g.Platform != c.Platform || g.Status != StatusActive {
-			return infraerrors.BadRequest("AUTO_CONFIG_GROUP_INVALID", "automatic configuration group is unavailable for this platform")
-		}
+	}
+	if err := ValidateObserverGroupBindings(ctx, groups); err != nil {
+		return err
 	}
 	plan, err := c.QualityRule.plan(c.Platform)
 	if err != nil {
@@ -232,7 +245,7 @@ func (s *adminServiceImpl) ApplyOAuthAutoConfig(ctx context.Context, input *Crea
 	lf := c.LoadFactor
 	input.LoadFactor = &lf
 	input.Concurrency = c.Concurrency
-	input.GroupIDs = append([]int64(nil), c.GroupIDs...)
+	input.GroupIDs = groups
 	input.Extra = maps.Clone(input.Extra)
 	if input.Extra == nil {
 		input.Extra = map[string]any{}
@@ -248,6 +261,27 @@ func (s *adminServiceImpl) ApplyOAuthAutoConfig(ctx context.Context, input *Crea
 	}
 	return nil
 }
+
+// resolveOAuthInitialGroups preserves the configured order and never invents a
+// routing destination. Explicit user selections are strict, including deleted IDs.
+func resolveOAuthInitialGroups(ctx context.Context, repo GroupRepository, platform string, ids []int64, skipDeleted bool) ([]int64, error) {
+	resolved := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		g, err := repo.GetByID(ctx, id)
+		if skipDeleted && errors.Is(err, ErrGroupNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if g == nil || g.Platform != platform || g.Status != StatusActive {
+			return nil, infraerrors.BadRequest("AUTO_CONFIG_GROUP_INVALID", "automatic configuration group is unavailable for this platform")
+		}
+		resolved = append(resolved, id)
+	}
+	return resolved, nil
+}
+
 func (s *AccountOpsService) GetOAuthAutoConfig(ctx context.Context) (OAuthAutoConfig, error) {
 	return GetOAuthAutoConfig(ctx, s.settings)
 }

@@ -83,6 +83,11 @@ describe('getVisibleMethods', () => {
 })
 
 describe('decidePaymentLaunch', () => {
+  it.each([false, true])('opens a native USDT dialog without redirecting (mobile=%s)', (isMobile) => {
+    const decision = decidePaymentLaunch(createOrderResult({ out_trade_no: 'usdt-order', payment_mode: 'redirect', pay_url: '/payment/crypto/usdt-order' }), { visibleMethod: 'usdt_trc20_plugin', orderType: 'balance', isMobile })
+    expect(decision.kind).toBe('crypto_dialog')
+    expect(decision.recovery.outTradeNo).toBe('usdt-order')
+  })
   it('uses Stripe popup waiting flow for desktop Alipay client secret', () => {
     const decision = decidePaymentLaunch(createOrderResult({
       client_secret: 'cs_test',

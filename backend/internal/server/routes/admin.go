@@ -22,6 +22,8 @@ func RegisterAdminRoutes(
 ) {
 	// 插件 UI 使用短时能力 URL，仅提供经过安装校验的静态资源。
 	v1.GET("/plugin-ui/:token/*path", h.Admin.Plugin.ServeUIAsset)
+	v1.GET("/plugins/public", h.Admin.Plugin.ListPublic)
+	v1.GET("/plugins/public/:id/assets/:hash/*path", h.Admin.Plugin.ServePublicAsset)
 
 	// 纯协议 worker 不使用管理员 JWT。它必须提供独立的高熵
 	// OPENAI_REAUTH_WORKER_TOKEN，handler 还会校验任务归属。
@@ -146,7 +148,7 @@ func RegisterAdminRoutes(
 		// TLS 指纹模板管理
 		registerTLSFingerprintProfileRoutes(admin, h)
 
-		// 本地进程插件管理
+		// 进程与静态网站插件管理
 		registerPluginRoutes(admin, h, stepUpAuth)
 
 		// API Key 管理
@@ -1063,6 +1065,7 @@ func registerPluginRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAut
 		plugins.GET("/:id/config", h.Admin.Plugin.GetConfig)
 		plugins.GET("/:id/status", h.Admin.Plugin.Status)
 		plugins.PUT("/:id/config", gin.HandlerFunc(stepUpAuth), h.Admin.Plugin.SaveConfig)
+		plugins.POST("/:id/config/recover", gin.HandlerFunc(stepUpAuth), h.Admin.Plugin.RecoverConfig)
 		plugins.POST("/:id/test", gin.HandlerFunc(stepUpAuth), h.Admin.Plugin.Test)
 		plugins.POST("/:id/ui-session", h.Admin.Plugin.CreateUISession)
 	}

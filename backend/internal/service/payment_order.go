@@ -108,6 +108,9 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 	if err != nil {
 		return nil, err
 	}
+	if req.PaymentType == PaymentTypeUSDTPlugin {
+		return s.createUSDTOrder(ctx, req, user, plan, cfg, orderAmount, limitAmount, feeRate, payAmount, bonusAmount)
+	}
 	if err := s.validateStripeFeeSelection(ctx, req); err != nil {
 		return nil, err
 	}
@@ -247,6 +250,9 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 		return nil, err
 	}
 	providerSnapshot := buildPaymentOrderProviderSnapshot(sel, req)
+	if req.PaymentType == PaymentTypeUSDTPlugin {
+		providerSnapshot = map[string]any{"schema_version": 1, "provider_key": PaymentTypeUSDTPlugin, "currency": "CNY", "plugin_id": req.usdtPluginID, "usdt_cny_rate": "6.5"}
+	}
 	if req.CouponID > 0 {
 		if providerSnapshot == nil {
 			providerSnapshot = map[string]any{}
@@ -289,6 +295,9 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 	if selectedInstanceID != "" {
 		b.SetProviderInstanceID(selectedInstanceID)
 	}
+	if req.PaymentType == PaymentTypeUSDTPlugin {
+		b.SetProviderKey(PaymentTypeUSDTPlugin)
+	}
 	if selectedProviderKey != "" {
 		b.SetProviderKey(selectedProviderKey)
 	}
@@ -312,6 +321,11 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 	order, err = tx.PaymentOrder.UpdateOneID(order.ID).SetRechargeCode(code).Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("set recharge code: %w", err)
+	}
+	if req.PaymentType == PaymentTypeUSDTPlugin {
+		if err := reserveUSDTInvoice(ctx, tx, order, req); err != nil {
+			return nil, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit order transaction: %w", err)

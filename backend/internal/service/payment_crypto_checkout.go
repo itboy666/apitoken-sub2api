@@ -13,6 +13,8 @@ import (
 )
 
 type CryptoCheckout struct {
+	ExchangeRate    string    `json:"exchange_rate,omitempty"`
+	ContractAddress string    `json:"contract_address,omitempty"`
 	OrderID         int64     `json:"order_id"`
 	OutTradeNo      string    `json:"out_trade_no"`
 	Status          string    `json:"status"`
@@ -34,6 +36,9 @@ func (s *PaymentService) GetCryptoCheckout(ctx context.Context, outTradeNo strin
 	order, err := s.entClient.PaymentOrder.Query().Where(paymentorder.OutTradeNo(outTradeNo), paymentorder.UserID(userID)).Only(ctx)
 	if err != nil {
 		return nil, infraerrors.NotFound("ORDER_NOT_FOUND", "payment order not found")
+	}
+	if order.PaymentType == PaymentTypeUSDTPlugin {
+		return s.usdtCheckout(ctx, order)
 	}
 	if order.ProviderKey == nil || *order.ProviderKey != payment.TypeBEpusdt || order.PaymentTradeNo == "" {
 		return nil, infraerrors.NotFound("ORDER_NOT_FOUND", "built-in payment order not found")

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import PluginsView from '../PluginsView.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import type { PluginUISession } from '@/api/admin'
 
 enableAutoUnmount(afterEach)
@@ -11,14 +12,26 @@ const {
   listPlugins,
   uploadPlugin,
   enablePlugin,
+  disablePlugin,
+  removePlugin,
   savePluginConfig,
+  recoverPluginConfig,
+  getPluginConfig,
+  showSuccess,
+  showError,
   createUISession,
   stepUpRun,
 } = vi.hoisted(() => ({
   listPlugins: vi.fn(),
   uploadPlugin: vi.fn(),
   enablePlugin: vi.fn(),
+  disablePlugin: vi.fn(),
+  removePlugin: vi.fn(),
   savePluginConfig: vi.fn(),
+  recoverPluginConfig: vi.fn(),
+  getPluginConfig: vi.fn(),
+  showSuccess: vi.fn(),
+  showError: vi.fn(),
   createUISession: vi.fn(),
   stepUpRun: vi.fn((action: () => Promise<unknown>) => action()),
 }))
@@ -29,10 +42,11 @@ vi.mock('@/api/admin', () => ({
       list: listPlugins,
       upload: uploadPlugin,
       enable: enablePlugin,
-      disable: vi.fn(),
-      remove: vi.fn(),
-      getConfig: vi.fn().mockResolvedValue({}),
+      disable: disablePlugin,
+      remove: removePlugin,
+      getConfig: getPluginConfig,
       saveConfig: savePluginConfig,
+      recoverConfig: recoverPluginConfig,
       test: vi.fn().mockResolvedValue({ success: true, message: 'ok', latency_ms: 1 }),
       createUISession,
     },
@@ -41,8 +55,8 @@ vi.mock('@/api/admin', () => ({
 
 vi.mock('@/stores', () => ({
   useAppStore: () => ({
-    showError: vi.fn(),
-    showSuccess: vi.fn(),
+    showError,
+    showSuccess,
     showInfo: vi.fn(),
   }),
 }))
@@ -115,15 +129,33 @@ const plugin = {
 
 function mountView() {
   return mount(PluginsView, {
+    attachTo: document.body,
     global: {
       stubs: {
         AppLayout: { template: '<div><slot /></div>' },
         BaseDialog: { template: '<div><slot /></div>' },
+        ConfirmDialog: { props: ['show', 'message', 'danger'], emits: ['confirm', 'cancel'], template: '<div v-if="show" data-test="confirm"><p>{{ message }}</p><button data-test="accept" @click="$emit(\'confirm\')">确认</button><button data-test="cancel" @click="$emit(\'cancel\')">取消</button></div>' },
         Icon: true,
         TotpStepUpDialog: true,
       },
     },
   })
+}
+
+function sendBridge(wrapper: ReturnType<typeof mountView>, type: string, requestID: string, extra: Record<string, unknown> = {}) {
+  const iframe = wrapper.get('iframe').element as HTMLIFrameElement
+  const token = new URL(iframe.src).hash.split('=')[1]
+  window.dispatchEvent(new MessageEvent('message', { source: iframe.contentWindow, origin: 'null', data: {
+    source: 'sub2api-plugin-ui', bridge_token: token, type, request_id: requestID, ...extra,
+  } }))
+}
+async function openConfig(wrapper: ReturnType<typeof mountView>, index = 0) {
+  await wrapper.findAll('button').filter(button => button.text() === 'admin.plugins.configure')[index].trigger('click')
+  await flushPromises()
+}
+async function closeConfig(wrapper: ReturnType<typeof mountView>) {
+  wrapper.getComponent(BaseDialog).vm.$emit('close')
+  await flushPromises()
 }
 
 describe('管理员插件页二次验证', () => {
@@ -133,7 +165,11 @@ describe('管理员插件页二次验证', () => {
     listPlugins.mockResolvedValue([plugin])
     uploadPlugin.mockResolvedValue(plugin)
     enablePlugin.mockResolvedValue(plugin)
+    disablePlugin.mockResolvedValue(plugin)
+    removePlugin.mockResolvedValue(plugin)
     savePluginConfig.mockResolvedValue({ enabled: true })
+    recoverPluginConfig.mockResolvedValue({ enabled: true })
+    getPluginConfig.mockResolvedValue({})
     createUISession.mockResolvedValue({
       url: '/api/v1/plugin-ui/token/index.html#bridge_token=bridge',
       bridge_token: 'bridge',
@@ -224,4 +260,118 @@ describe('管理员插件页二次验证', () => {
     expect(stepUpRun).toHaveBeenCalledTimes(1)
     expect(uploadPlugin).toHaveBeenCalledTimes(1)
   })
+
+  it('keeps OAuth rollout controls for transport packages', async () => {
+    const wrapper = mountView(); await flushPromises()
+    expect(wrapper.find('input[type="range"]').exists()).toBe(true)
+  })
+
+  it('shows native enabled state for a website plugin without OAuth bindings', async () => {
+    listPlugins.mockResolvedValue([{ ...plugin, name: 'Support', state: 'enabled', bindings: [], manifest: { ...plugin.manifest, capabilities: [{ id: 'website.support_widget.v1', platform: 'website', account_type: '' }], public_ui: { entrypoint: 'public/index.html' } } }])
+    const wrapper = mountView(); await flushPromises()
+    expect(wrapper.find('input[type="range"]').exists()).toBe(false)
+    const buttons = wrapper.findAll('button')
+    expect(buttons.some(button => button.text() === 'admin.plugins.disable')).toBe(true)
+    expect(buttons.some(button => button.text() === 'admin.plugins.enable')).toBe(false)
+    expect(buttons.find(button => button.text() === 'admin.plugins.uninstall')?.attributes('disabled')).toBeDefined()
+  })
+
+  it('requires the in-app confirmation before disabling a website plugin', async () => {
+    listPlugins.mockResolvedValue([{ ...plugin, state: 'enabled', bindings: [], manifest: { ...plugin.manifest, capabilities: [{ id: 'website.support_widget.v1', platform: 'website', account_type: '' }], public_ui: { entrypoint: 'public/index.html' } } }])
+    const wrapper = mountView(); await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === 'admin.plugins.disable')!.trigger('click')
+    const dialog = wrapper.getComponent(ConfirmDialog)
+    expect(dialog.props('show')).toBe(true)
+    expect(dialog.props('message')).toBe('admin.plugins.confirmDisableWebsite')
+    expect(disablePlugin).not.toHaveBeenCalled()
+    dialog.vm.$emit('confirm'); await flushPromises()
+    expect(disablePlugin).toHaveBeenCalledWith(7)
+    expect(stepUpRun).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not uninstall until the in-app confirmation is accepted', async () => {
+    const wrapper = mountView(); await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === 'admin.plugins.uninstall')!.trigger('click')
+    const dialog = wrapper.getComponent(ConfirmDialog)
+    expect(dialog.props('show')).toBe(true)
+    expect(dialog.props('danger')).toBe(true)
+    expect(removePlugin).not.toHaveBeenCalled()
+    dialog.vm.$emit('cancel'); await flushPromises()
+    expect(removePlugin).not.toHaveBeenCalled()
+    expect(stepUpRun).not.toHaveBeenCalled()
+  })
+
+  it('does not leak an old load into a reopened dialog reusing the same request ID', async () => {
+    let finishOld!: (value: unknown) => void
+    let finishNew!: (value: unknown) => void
+    getPluginConfig
+      .mockReturnValueOnce(new Promise(resolve => { finishOld = resolve }))
+      .mockReturnValueOnce(new Promise(resolve => { finishNew = resolve }))
+    const wrapper = mountView(); await flushPromises(); await openConfig(wrapper)
+    const oldFrame = wrapper.get('iframe').element as HTMLIFrameElement
+    const oldPost = vi.spyOn(oldFrame.contentWindow!, 'postMessage')
+    sendBridge(wrapper, 'config.load', 'load1')
+    await closeConfig(wrapper); await openConfig(wrapper)
+    const newFrame = wrapper.get('iframe').element as HTMLIFrameElement
+    const newPost = vi.spyOn(newFrame.contentWindow!, 'postMessage')
+    sendBridge(wrapper, 'config.load', 'load1')
+    finishOld({ old_secret: 'must-not-leak' }); await flushPromises()
+    expect(oldPost).not.toHaveBeenCalled(); expect(newPost).not.toHaveBeenCalled()
+    finishNew({ current: true }); await flushPromises()
+    expect(newPost).toHaveBeenCalledTimes(1)
+    expect(newPost).toHaveBeenCalledWith(expect.objectContaining({ request_id: 'load1', config: { current: true } }), '*')
+  })
+
+  it('invalidates old async responses when the iframe navigates with the same WindowProxy', async () => {
+    let finishOld!: (value: unknown) => void
+    getPluginConfig.mockReturnValueOnce(new Promise(resolve => { finishOld = resolve }))
+    const wrapper = mountView(); await flushPromises(); await openConfig(wrapper)
+    await wrapper.get('iframe').trigger('load')
+    const iframe = wrapper.get('iframe').element as HTMLIFrameElement
+    const post = vi.spyOn(iframe.contentWindow!, 'postMessage')
+    sendBridge(wrapper, 'config.load', 'load1')
+    await wrapper.get('iframe').trigger('load')
+    getPluginConfig.mockResolvedValueOnce({ new_document: true })
+    sendBridge(wrapper, 'config.load', 'load1'); await flushPromises()
+    finishOld({ old_document_secret: 'must-not-leak' }); await flushPromises()
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(post).toHaveBeenCalledWith(expect.objectContaining({ config: { new_document: true } }), '*')
+  })
+
+  it.each([{ id: 7, type: 'config.save' }, { id: 8, type: 'config.save' }, { id: 7, type: 'config.recover' }])('does not run a stale step-up mutation after reopening plugin $id ($type)', async ({ id, type }) => {
+    let authorize!: () => void
+    stepUpRun.mockImplementationOnce(action => new Promise((resolve, reject) => {
+      authorize = () => { Promise.resolve().then(action).then(resolve, reject) }
+    }))
+    listPlugins.mockResolvedValue([plugin, { ...plugin, id: 8, name: 'Other Transport' }])
+    const wrapper = mountView(); await flushPromises(); await openConfig(wrapper)
+    sendBridge(wrapper, type, 'save1', { config: { old: true } }); await flushPromises()
+    await closeConfig(wrapper); await openConfig(wrapper, id === 7 ? 0 : 1)
+    authorize(); await flushPromises()
+    expect(savePluginConfig).not.toHaveBeenCalled()
+    expect(recoverPluginConfig).not.toHaveBeenCalled()
+    expect(showSuccess).not.toHaveBeenCalled(); expect(showError).not.toHaveBeenCalled()
+    const post = vi.spyOn((wrapper.get('iframe').element as HTMLIFrameElement).contentWindow!, 'postMessage')
+    sendBridge(wrapper, type, 'save1', { config: { current: true } }); await flushPromises()
+    const expected = type === 'config.recover' ? recoverPluginConfig : savePluginConfig
+    expect(expected).toHaveBeenCalledTimes(1)
+    expect(expected).toHaveBeenCalledWith(id, { current: true })
+    expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: `${type}.result`, ok: true }), '*')
+  })
+
+  it('keeps a started save bound to its original plugin and drops the late reply', async () => {
+    let finishSave!: (value: unknown) => void
+    savePluginConfig.mockReturnValueOnce(new Promise(resolve => { finishSave = resolve }))
+    listPlugins.mockResolvedValue([plugin, { ...plugin, id: 8, name: 'Other Transport' }])
+    const wrapper = mountView(); await flushPromises(); await openConfig(wrapper)
+    sendBridge(wrapper, 'config.save', 'save1', { config: { original: true } }); await flushPromises()
+    expect(savePluginConfig).toHaveBeenCalledWith(7, { original: true })
+    await closeConfig(wrapper); await openConfig(wrapper, 1)
+    const iframe = wrapper.get('iframe').element as HTMLIFrameElement
+    const post = vi.spyOn(iframe.contentWindow!, 'postMessage')
+    finishSave({ original_secret: 'must-not-leak' }); await flushPromises()
+    expect(post).not.toHaveBeenCalled(); expect(showSuccess).not.toHaveBeenCalled()
+    expect(savePluginConfig).toHaveBeenCalledTimes(1)
+  })
+
 })

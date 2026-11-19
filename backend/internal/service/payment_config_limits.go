@@ -41,6 +41,13 @@ func (s *PaymentConfigService) GetAvailableMethodLimits(ctx context.Context) (*M
 		pcApplyMethodFees(&ml, insts, globalFee)
 		resp.Methods[ml.PaymentType] = ml
 	}
+	if _, _, e := s.pluginManager.activePaymentPlugin(ctx); e == nil {
+		ml := MethodLimits{PaymentType: PaymentTypeUSDTPlugin, DisplayName: "USDT · TRC20", Currency: "CNY", FeeRate: globalFee, FeeRateMin: globalFee, FeeRateMax: globalFee}
+		if cfg, cfgErr := s.GetPaymentConfig(ctx); cfgErr == nil {
+			ml.SingleMin, ml.SingleMax, ml.DailyLimit = cfg.MinAmount, cfg.MaxAmount, cfg.DailyLimit
+		}
+		resp.Methods[PaymentTypeUSDTPlugin] = ml
+	}
 	resp.GlobalMin, resp.GlobalMax = pcComputeGlobalRange(resp.Methods)
 	return resp, nil
 }
@@ -113,6 +120,9 @@ func (s *PaymentConfigService) GetMethodLimits(ctx context.Context, types []stri
 }
 
 func (s *PaymentConfigService) ValidateMethodCurrencyConsistency(ctx context.Context, paymentType string) (string, error) {
+	if paymentType == PaymentTypeUSDTPlugin {
+		return "CNY", nil
+	}
 	method := NormalizeVisibleMethod(paymentType)
 	if method == "" || s == nil || s.entClient == nil {
 		return payment.DefaultPaymentCurrency, nil

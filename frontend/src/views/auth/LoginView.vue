@@ -2,14 +2,15 @@
   <AuthLayout>
     <div class="space-y-6">
       <!-- Title -->
-      <div class="text-center">
-        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+      <div class="auth-view-header">
+        <h1 class="auth-view-title">
           {{ t('auth.welcomeBack') }}
-        </h2>
-        <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">
+        </h1>
+        <p class="auth-view-subtitle">
           {{ t('auth.signInToAccount') }}
         </p>
       </div>
+      <p v-if="errorMessage" class="auth-api-error" role="alert">{{ errorMessage }}</p>
       <!-- Login Form -->
       <form @submit.prevent="handleLogin" class="space-y-5">
         <!-- Email Input -->
@@ -32,8 +33,11 @@
               class="input pl-11"
               :class="{ 'input-error': errors.email }"
               :placeholder="t('auth.emailPlaceholder')"
+              :aria-invalid="!!errors.email"
+              :aria-describedby="errors.email ? 'email-error' : undefined"
             />
           </div>
+          <p v-if="errors.email" id="email-error" class="auth-field-error">{{ errors.email }}</p>
         </div>
 
         <!-- Password Input -->
@@ -55,17 +59,22 @@
               class="input pl-11 pr-11"
               :class="{ 'input-error': errors.password }"
               :placeholder="t('auth.passwordPlaceholder')"
+              :aria-invalid="!!errors.password"
+              :aria-describedby="errors.password ? 'password-error' : undefined"
             />
             <button
               type="button"
               @click="showPassword = !showPassword"
+              :aria-label="showPassword ? passwordVisibility.hide : passwordVisibility.show"
+              :aria-pressed="showPassword"
               :disabled="authActionDisabled"
-              class="absolute inset-y-0 right-0 flex items-center pr-3.5 text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-dark-300"
+              class="auth-password-toggle absolute inset-y-0 right-0 flex items-center pr-3.5 text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-dark-300"
             >
               <Icon v-if="showPassword" name="eyeOff" size="md" />
               <Icon v-else name="eye" size="md" />
             </button>
           </div>
+          <p v-if="errors.password" id="password-error" class="auth-field-error">{{ errors.password }}</p>
           <div class="mt-1 flex items-center justify-between">
             <span></span>
             <router-link
@@ -252,7 +261,10 @@ import type {
 import { extractI18nErrorMessage } from '@/utils/apiError'
 import { clearAllAffiliateReferralCodes } from '@/utils/oauthAffiliate'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
+const passwordVisibility = computed(() => locale?.value?.startsWith('zh')
+  ? { show: '显示密码', hide: '隐藏密码' }
+  : { show: 'Show password', hide: 'Hide password' })
 const LOGIN_AGREEMENT_STORAGE_KEY = 'sub2api_login_agreement_consent'
 
 // ==================== Router & Stores ====================

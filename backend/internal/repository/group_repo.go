@@ -466,9 +466,25 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 }
 
 func (r *groupRepository) Delete(ctx context.Context, id int64) error {
-	_, err := r.client.Group.Delete().Where(group.IDEQ(id)).Exec(ctx)
-	if err != nil {
+	tx, err := r.client.Tx(ctx)
+	if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
+		return err
+	}
+	client := r.client
+	if err == nil {
+		defer func() { _ = tx.Rollback() }()
+		client = tx.Client()
+	}
+	if _, err := client.Group.Delete().Where(group.IDEQ(id)).Exec(ctx); err != nil {
 		return translatePersistenceError(err, service.ErrGroupNotFound, nil)
+	}
+	if err := removeOAuthAutoConfigGroup(ctx, client, id); err != nil {
+		return err
+	}
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return err
+		}
 	}
 	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventGroupChanged, nil, &id, nil); err != nil {
 		logger.LegacyPrintf("repository.group", "[SchedulerOutbox] enqueue group delete failed: group=%d err=%v", id, err)
@@ -930,6 +946,12 @@ func (r *groupRepository) deleteCascade(ctx context.Context, id int64, requireEm
 		if hasAccount {
 			return nil, service.ErrGroupNotEmpty
 		}
+	}
+
+	// Membership deletion updates accounts through ai_ops_membership_revision_trigger.
+	// Lock policy first to match the workers' settings -> accounts lock order.
+	if err := removeOAuthAutoConfigGroup(ctx, exec, id); err != nil {
+		return nil, err
 	}
 
 	var affectedUserIDs []int64

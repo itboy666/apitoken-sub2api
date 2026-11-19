@@ -2,14 +2,15 @@
   <AuthLayout>
     <div class="space-y-6">
       <!-- Title -->
-      <div class="text-center">
-        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+      <div class="auth-view-header">
+        <h1 class="auth-view-title">
           {{ t('auth.createAccount') }}
-        </h2>
-        <p class="mt-2 text-sm text-gray-500 dark:text-dark-400">
+        </h1>
+        <p class="auth-view-subtitle">
           {{ t('auth.signUpToStart', { siteName }) }}
         </p>
       </div>
+      <p v-if="errorMessage" class="auth-api-error" role="alert">{{ errorMessage }}</p>
 
       <!-- Registration Disabled Message -->
       <div v-if="lotteryInviteNotice" role="status" class="rounded-lg border border-primary-200 bg-primary-50 p-3 text-sm leading-6 text-primary-800 dark:border-primary-800 dark:bg-primary-950 dark:text-primary-200">
@@ -52,8 +53,11 @@
               class="input pl-11"
               :class="{ 'input-error': errors.email }"
               :placeholder="t('auth.emailPlaceholder')"
+              :aria-invalid="!!errors.email"
+              :aria-describedby="errors.email ? 'email-error' : undefined"
             />
           </div>
+          <p v-if="errors.email" id="email-error" class="auth-field-error">{{ errors.email }}</p>
         </div>
 
         <!-- Password Input -->
@@ -75,17 +79,22 @@
               class="input pl-11 pr-11"
               :class="{ 'input-error': errors.password }"
               :placeholder="t('auth.createPasswordPlaceholder')"
+              :aria-invalid="!!errors.password"
+              :aria-describedby="errors.password ? 'password-error' : undefined"
             />
             <button
               type="button"
               :disabled="registrationActionDisabled"
               @click="showPassword = !showPassword"
-              class="absolute inset-y-0 right-0 flex items-center pr-3.5 text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-dark-300"
+              :aria-label="showPassword ? passwordVisibility.hide : passwordVisibility.show"
+              :aria-pressed="showPassword"
+              class="auth-password-toggle absolute inset-y-0 right-0 flex items-center pr-3.5 text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-dark-300"
             >
               <Icon v-if="showPassword" name="eyeOff" size="md" />
               <Icon v-else name="eye" size="md" />
             </button>
           </div>
+          <p v-if="errors.password" id="password-error" class="auth-field-error">{{ errors.password }}</p>
           <p class="input-hint">
             {{ t('auth.passwordHint') }}
           </p>
@@ -110,17 +119,22 @@
               class="input pl-11 pr-11"
               :class="{ 'input-error': errors.confirmPassword }"
               :placeholder="t('auth.confirmPasswordPlaceholder')"
+              :aria-invalid="!!errors.confirmPassword"
+              :aria-describedby="errors.confirmPassword ? 'confirmPassword-error' : undefined"
             />
             <button
               type="button"
               :disabled="registrationActionDisabled"
               @click="showConfirmPassword = !showConfirmPassword"
-              class="absolute inset-y-0 right-0 flex items-center pr-3.5 text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-dark-300"
+              :aria-label="showConfirmPassword ? passwordVisibility.hide : passwordVisibility.show"
+              :aria-pressed="showConfirmPassword"
+              class="auth-password-toggle absolute inset-y-0 right-0 flex items-center pr-3.5 text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-dark-300"
             >
               <Icon v-if="showConfirmPassword" name="eyeOff" size="md" />
               <Icon v-else name="eye" size="md" />
             </button>
           </div>
+          <p v-if="errors.confirmPassword" id="confirmPassword-error" class="auth-field-error">{{ errors.confirmPassword }}</p>
         </div>
 
         <!-- Invitation Code Input (Required when enabled) -->
@@ -406,6 +420,9 @@ import {
 import type { LoginAgreementDocument } from '@/types'
 
 const { t, locale } = useI18n()
+const passwordVisibility = computed(() => locale?.value?.startsWith('zh')
+  ? { show: '显示密码', hide: '隐藏密码' }
+  : { show: 'Show password', hide: 'Hide password' })
 const LOGIN_AGREEMENT_STORAGE_KEY = 'sub2api_login_agreement_consent'
 
 // ==================== Router & Stores ====================
@@ -447,7 +464,7 @@ const aliyunCaptchaEnabled = ref<boolean>(false)
 const aliyunCaptchaSceneId = ref<string>('')
 const aliyunCaptchaPrefix = ref<string>('')
 const aliyunCaptchaRegion = ref<string>('cn')
-const siteName = ref<string>('Sub2API')
+const siteName = ref<string>(appStore.cachedPublicSettings?.site_name || appStore.siteName || 'Sub2API')
 const linuxdoOAuthEnabled = ref<boolean>(false)
 const wechatOAuthEnabled = ref<boolean>(false)
 const oidcOAuthEnabled = ref<boolean>(false)
@@ -585,7 +602,7 @@ onMounted(async () => {
     aliyunCaptchaSceneId.value = settings.aliyun_captcha_scene_id || ''
     aliyunCaptchaPrefix.value = settings.aliyun_captcha_prefix || ''
     aliyunCaptchaRegion.value = settings.aliyun_captcha_region || 'cn'
-    siteName.value = settings.site_name || 'Sub2API'
+    siteName.value = settings.site_name || appStore.cachedPublicSettings?.site_name || appStore.siteName || 'Sub2API'
     linuxdoOAuthEnabled.value = settings.linuxdo_oauth_enabled
     wechatOAuthEnabled.value = isWeChatWebOAuthEnabled(settings)
     oidcOAuthEnabled.value = settings.oidc_oauth_enabled
