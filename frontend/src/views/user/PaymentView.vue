@@ -80,7 +80,7 @@
                 :selected="selectedMethod"
                 @select="selectedMethod = $event"
               />
-              <p v-if="selectedMethod === 'usdt_trc20_plugin'" class="mt-4 rounded-xl bg-teal-50 p-4 text-sm leading-6 text-teal-900 dark:bg-teal-950 dark:text-teal-100">1 USDT = 6.5 CNY · 使用 TRON（TRC20）网络。确认后将在当前页面打开付款窗口，请按窗口内完整金额转账。</p>
+              <p v-if="selectedMethod === 'usdt_trc20_plugin'" class="mt-4 rounded-xl bg-teal-50 p-4 text-sm leading-6 text-teal-900 dark:bg-teal-950 dark:text-teal-100">按下单时的结算汇率换算，使用 TRON（TRC20）网络。确认后将在当前页面打开付款窗口，显示本单汇率；请按窗口内完整金额转账。</p>
               <StripeSubtypeSelector v-if="selectedMethod === 'stripe' && Object.keys(stripeSubMethods).length" v-model="selectedSubtype" :methods="stripeSubMethods" />
             </div>
             <RechargeCouponPicker :amount="validAmount" :method="selectedMethod" :currency="selectedCurrency" :disabled="submitting" :initial-id="Number(route.query.coupon) || undefined" @change="onCouponChange" />
@@ -232,7 +232,7 @@
                   :selected="selectedMethod"
                   @select="selectedMethod = $event"
                 />
-                <p v-if="selectedMethod === 'usdt_trc20_plugin'" class="mt-4 rounded-xl bg-teal-50 p-4 text-sm leading-6 text-teal-900 dark:bg-teal-950 dark:text-teal-100">1 USDT = 6.5 CNY · 使用 TRON（TRC20）网络。确认后将在当前页面打开付款窗口，请按窗口内完整金额转账。</p>
+                <p v-if="selectedMethod === 'usdt_trc20_plugin'" class="mt-4 rounded-xl bg-teal-50 p-4 text-sm leading-6 text-teal-900 dark:bg-teal-950 dark:text-teal-100">按下单时的结算汇率换算，使用 TRON（TRC20）网络。确认后将在当前页面打开付款窗口，显示本单汇率；请按窗口内完整金额转账。</p>
               <StripeSubtypeSelector v-if="selectedMethod === 'stripe' && Object.keys(stripeSubMethods).length" v-model="selectedSubtype" :methods="stripeSubMethods" />
               </div>
               <div v-if="hasFee && selectedPlan.price > 0" class="card p-6">
