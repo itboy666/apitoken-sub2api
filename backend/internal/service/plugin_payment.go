@@ -23,6 +23,9 @@ func maskPaymentPluginConfig(raw json.RawMessage) (json.RawMessage, error) {
 	return json.Marshal(c)
 }
 func mergePaymentPluginSecret(raw, previous json.RawMessage) (json.RawMessage, error) {
+	if err := tronpayment.ValidateConfigObject(raw); err != nil {
+		return nil, err
+	}
 	var c, old map[string]any
 	if json.Unmarshal(raw, &c) != nil || c == nil {
 		return nil, errors.New("支付配置必须是 JSON 对象")
@@ -31,10 +34,22 @@ func mergePaymentPluginSecret(raw, previous json.RawMessage) (json.RawMessage, e
 		return nil, errors.New("原支付配置无法读取")
 	}
 	delete(c, "api_key_set")
+	if key, exists := c["tronscan_api_key"]; exists {
+		if _, ok := key.(string); !ok {
+			return nil, errors.New("tronscan_api_key 必须是字符串")
+		}
+	}
 	if key, _ := c["tronscan_api_key"].(string); key == "" {
 		c["tronscan_api_key"] = old["tronscan_api_key"]
 	}
-	return json.Marshal(c)
+	merged, err := json.Marshal(c)
+	if err != nil {
+		return nil, err
+	}
+	if _, err = tronpayment.ParseConfig(merged); err != nil {
+		return nil, err
+	}
+	return merged, nil
 }
 
 // Payment runtimes share lifecycle/configuration but never enter the OAuth route.

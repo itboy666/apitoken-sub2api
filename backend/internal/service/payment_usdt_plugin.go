@@ -24,17 +24,17 @@ var usdtHashPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 type usdtInvoice struct {
 	OrderID, PluginID               int64
 	OutTradeNo, Wallet, AmountMicro string
-	PayCNY                          string
+	PayCNY, RateCNY                 string
 	CreatedAt, ExpiresAt            time.Time
 	Hash                            sql.NullString
 	CheckFailed                     bool
 }
 
-func usdtBaseMicro(cny float64) (int64, error) {
-	if !isValidProviderAmount(cny) {
+func usdtBaseMicro(cny, rate float64) (int64, error) {
+	if !isValidProviderAmount(cny) || !isValidProviderAmount(rate) {
 		return 0, errors.New("invalid CNY amount")
 	}
-	n := decimal.NewFromFloat(cny).Div(decimal.NewFromFloat(6.5)).Shift(2).Ceil().Shift(4)
+	n := decimal.NewFromFloat(cny).Div(decimal.NewFromFloat(rate)).Shift(2).Ceil().Shift(4)
 	if !n.IsPositive() || n.GreaterThan(decimal.NewFromInt(1_000_000_000_000_000)) {
 		return 0, errors.New("USDT amount out of range")
 	}
@@ -49,7 +49,7 @@ func reserveUSDTInvoice(ctx context.Context, tx *dbent.Tx, o *dbent.PaymentOrder
 }
 
 func reserveUSDTInvoiceWithOffset(ctx context.Context, tx *dbent.Tx, o *dbent.PaymentOrder, req CreateOrderRequest, randomCents int) error {
-	base, err := usdtBaseMicro(o.PayAmount)
+	base, err := usdtBaseMicro(o.PayAmount, req.usdtRateCNY)
 	if err != nil {
 		return err
 	}
@@ -75,20 +75,25 @@ func reserveUSDTInvoiceWithOffset(ctx context.Context, tx *dbent.Tx, o *dbent.Pa
 		}
 		_, e = tx.Client().ExecContext(ctx, `INSERT INTO sub2api_usdt_invoices
           (order_id,out_trade_no,plugin_id,wallet,contract,amount_micro,pay_cny,rate_cny,created_at,expires_at)
-          VALUES($1,$2,$3,$4,$5,$6,$7,6.5,$8,$9)`,
-			o.ID, o.OutTradeNo, req.usdtPluginID, req.usdtWallet, tronpayment.ContractAddress, micro, o.PayAmount, o.CreatedAt, o.ExpiresAt)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+			o.ID, o.OutTradeNo, req.usdtPluginID, req.usdtWallet, tronpayment.ContractAddress, micro, o.PayAmount, req.usdtRateCNY, o.CreatedAt, o.ExpiresAt)
 		return e
 	}
 	return infraerrors.ServiceUnavailable("USDT_AMOUNT_UNAVAILABLE", "当前相近付款金额均被占用，请稍后重试或换一个充值金额")
 }
 
-func (s *PaymentService) createUSDTOrder(ctx context.Context, req CreateOrderRequest, user *User, plan *dbent.SubscriptionPlan, cfg *PaymentConfig, amount, limit, fee, pay, bonus float64) (*CreateOrderResponse, error) {
+func (s *PaymentService) createUSDTOrder(ctx context.Context, req CreateOrderRequest, user *User, plan *dbent.SubscriptionPlan, cfg *PaymentConfig, amount, limit, bonus float64) (*CreateOrderResponse, error) {
 	p, c, err := s.configService.pluginManager.activePaymentPlugin(ctx)
 	if err != nil {
 		return nil, infraerrors.ServiceUnavailable("USDT_UNAVAILABLE", err.Error())
 	}
 	req.usdtPluginID = p.ID
 	req.usdtWallet = c.WalletAddress
+	req.usdtRateCNY = c.RateCNY
+	fee, pay, err := quoteUSDTOrder(c, cfg, req.OrderType, limit)
+	if err != nil {
+		return nil, err
+	}
 	// Invoice time windows are bounded by the verifier.
 	localCfg := *cfg
 	if localCfg.OrderTimeoutMin < 2 {
@@ -106,8 +111,14 @@ func (s *PaymentService) createUSDTOrder(ctx context.Context, req CreateOrderReq
 		PayURL: "/payment/crypto/" + o.OutTradeNo, Currency: "CNY", ExpiresAt: o.ExpiresAt, PaymentMode: "redirect"}, nil
 }
 
+func quoteUSDTOrder(c tronpayment.Config, cfg *PaymentConfig, orderType string, amount float64) (float64, float64, error) {
+	fee := c.EffectiveFeeRate()
+	_, pay, err := calculateCreateOrderPayAmountForOrderType(amount, fee, "CNY", orderType, cfg.SubscriptionUSDToCNYRate)
+	return fee, pay, err
+}
+
 func (s *PaymentService) usdtInvoice(ctx context.Context, id int64) (*usdtInvoice, error) {
-	rows, err := s.entClient.QueryContext(ctx, `SELECT order_id,plugin_id,out_trade_no,wallet,amount_micro::text,pay_cny::text,created_at,expires_at,transaction_hash,check_failed FROM sub2api_usdt_invoices WHERE order_id=$1`, id)
+	rows, err := s.entClient.QueryContext(ctx, `SELECT order_id,plugin_id,out_trade_no,wallet,amount_micro::text,pay_cny::text,rate_cny::text,created_at,expires_at,transaction_hash,check_failed FROM sub2api_usdt_invoices WHERE order_id=$1`, id)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +127,7 @@ func (s *PaymentService) usdtInvoice(ctx context.Context, id int64) (*usdtInvoic
 		return nil, errors.New("USDT invoice not found")
 	}
 	i := &usdtInvoice{}
-	err = rows.Scan(&i.OrderID, &i.PluginID, &i.OutTradeNo, &i.Wallet, &i.AmountMicro, &i.PayCNY, &i.CreatedAt, &i.ExpiresAt, &i.Hash, &i.CheckFailed)
+	err = rows.Scan(&i.OrderID, &i.PluginID, &i.OutTradeNo, &i.Wallet, &i.AmountMicro, &i.PayCNY, &i.RateCNY, &i.CreatedAt, &i.ExpiresAt, &i.Hash, &i.CheckFailed)
 	return i, err
 }
 
@@ -288,7 +299,11 @@ func (s *PaymentService) usdtCheckout(ctx context.Context, o *dbent.PaymentOrder
 	if _, _, err = s.configService.pluginManager.activePaymentPlugin(ctx); err != nil {
 		network = "delayed"
 	}
-	return &CryptoCheckout{OrderID: o.ID, OutTradeNo: o.OutTradeNo, Status: o.Status, Network: "usdt.trc20", Crypto: "USDT", Address: i.Wallet, CryptoAmount: formatUSDTMicro(amount), FiatAmount: i.PayCNY, Currency: "CNY", ExpiresAt: i.ExpiresAt, TransactionHash: i.Hash.String, NetworkStatus: network, ExchangeRate: "6.5", ContractAddress: tronpayment.ContractAddress}, nil
+	rate, err := decimal.NewFromString(i.RateCNY)
+	if err != nil || !rate.IsPositive() {
+		return nil, errors.New("invalid stored USDT exchange rate")
+	}
+	return &CryptoCheckout{OrderID: o.ID, OutTradeNo: o.OutTradeNo, Status: o.Status, Network: "usdt.trc20", Crypto: "USDT", Address: i.Wallet, CryptoAmount: formatUSDTMicro(amount), FiatAmount: i.PayCNY, Currency: "CNY", ExpiresAt: i.ExpiresAt, TransactionHash: i.Hash.String, NetworkStatus: network, ExchangeRate: rate.String(), ContractAddress: tronpayment.ContractAddress}, nil
 }
 
 // Keep already-issued six-decimal invoices exact. New invoices use cents.

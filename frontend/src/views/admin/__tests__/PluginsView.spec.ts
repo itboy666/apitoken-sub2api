@@ -322,6 +322,26 @@ describe('管理员插件页二次验证', () => {
     expect(newPost).toHaveBeenCalledWith(expect.objectContaining({ request_id: 'load1', config: { current: true } }), '*')
   })
 
+  it('rejects config writes from other windows, origins, and bridge sessions', async () => {
+    const wrapper = mountView(); await flushPromises(); await openConfig(wrapper)
+    const iframe = wrapper.get('iframe').element as HTMLIFrameElement
+    expect(iframe.getAttribute('sandbox')).toBe('allow-scripts')
+    const token = new URL(iframe.src).hash.split('=')[1]
+    for (const attack of [
+      { source: window, origin: 'null', token },
+      { source: iframe.contentWindow, origin: 'https://attacker.invalid', token },
+      { source: iframe.contentWindow, origin: 'null', token: 'forged' },
+    ]) {
+      window.dispatchEvent(new MessageEvent('message', { source: attack.source, origin: attack.origin, data: {
+        source: 'sub2api-plugin-ui', bridge_token: attack.token, request_id: 'forged-save', type: 'config.save', config: { fee_rate: 100 },
+      } }))
+    }
+    await flushPromises()
+    expect(savePluginConfig).not.toHaveBeenCalled()
+    expect(stepUpRun).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('invalidates old async responses when the iframe navigates with the same WindowProxy', async () => {
     let finishOld!: (value: unknown) => void
     getPluginConfig.mockReturnValueOnce(new Promise(resolve => { finishOld = resolve }))

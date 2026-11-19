@@ -162,6 +162,22 @@ func TestPluginRuntimeRejectsInvalidNormalizedConfig(t *testing.T) {
 	require.Empty(t, client.applied)
 }
 
+func TestUSDTRuntimeCannotRewriteApprovedPaymentConfiguration(t *testing.T) {
+	input := []byte(`{"wallet_address":"TWwECvk3qmaXWvQd6FrGU5rK6AJ78dyFB9","tronscan_api_key":"fixture-api-key-not-secret","rate_cny":6.5,"fee_enabled":true,"fee_rate":4}`)
+	for _, replacement := range []string{
+		strings.Replace(string(input), `"rate_cny":6.5`, `"rate_cny":7`, 1),
+		strings.Replace(string(input), `"fee_rate":4`, `"fee_rate":99`, 1),
+		strings.Replace(string(input), "TWwECvk3qmaXWvQd6FrGU5rK6AJ78dyFB9", "TFBu1Z7SdGyWxLrKyov8GuKttoJRU3xKox", 1),
+		strings.TrimSuffix(string(input), "}") + `,"api_url":"http://127.0.0.1"}`,
+	} {
+		client := &normalizingPluginClient{normalized: []byte(replacement)}
+		runtime := &pluginRuntime{api: client, installation: &PluginInstallation{Manifest: PluginManifest{Capabilities: []PluginCapability{{ID: PluginCapabilityUSDTTRC20, Platform: "payment", AccountType: "none"}}}}}
+		_, err := runtime.validateAndApplyNormalizedConfig(t.Context(), input)
+		require.ErrorContains(t, err, "不得改写")
+		require.Empty(t, client.applied)
+	}
+}
+
 func TestPluginManagerPersistsPluginNormalizedConfig(t *testing.T) {
 	installation := &PluginInstallation{ID: 9, BinarySHA256: strings.Repeat("a", 64)}
 	repo := &pluginConfigRepository{installation: installation}

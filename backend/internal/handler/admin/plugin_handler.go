@@ -129,6 +129,7 @@ func (h *PluginHandler) Delete(c *gin.Context) {
 }
 
 func (h *PluginHandler) GetConfig(c *gin.Context) {
+	c.Header("Cache-Control", "private, no-store")
 	id, ok := pluginIDParam(c)
 	if !ok {
 		return
@@ -154,24 +155,14 @@ func (h *PluginHandler) RecoverConfig(c *gin.Context) {
 }
 
 func (h *PluginHandler) writeConfig(c *gin.Context, recoverConfig bool) {
+	c.Header("Cache-Control", "private, no-store")
 	id, ok := pluginIDParam(c)
 	if !ok {
 		return
 	}
-	decoder := json.NewDecoder(http.MaxBytesReader(c.Writer, c.Request.Body, 4*1024*1024))
-	decoder.UseNumber()
-	var value any
-	if err := decoder.Decode(&value); err != nil {
+	raw, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, 4*1024*1024))
+	if err != nil || !json.Valid(raw) {
 		response.BadRequest(c, "插件配置必须是有效 JSON")
-		return
-	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		response.BadRequest(c, "插件配置只能包含一个 JSON 值")
-		return
-	}
-	raw, err := json.Marshal(value)
-	if err != nil {
-		response.BadRequest(c, "插件配置无法序列化")
 		return
 	}
 	var saved json.RawMessage
@@ -217,6 +208,7 @@ func (h *PluginHandler) Status(c *gin.Context) {
 }
 
 func (h *PluginHandler) CreateUISession(c *gin.Context) {
+	c.Header("Cache-Control", "private, no-store")
 	id, ok := pluginIDParam(c)
 	if !ok {
 		return
@@ -268,7 +260,7 @@ func (h *PluginHandler) ServeUIAsset(c *gin.Context) {
 	// sandbox iframe 没有 allow-same-origin，会以不透明来源加载自己的 CSS/JS。
 	// 资源 URL 由短时随机能力 Token 保护，Bridge Token 只存在于 fragment 中。
 	c.Header("Cross-Origin-Resource-Policy", "cross-origin")
-	c.Header("Content-Security-Policy", "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'; navigate-to 'none'")
+	c.Header("Content-Security-Policy", "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'")
 	c.Data(http.StatusOK, contentType, data)
 }
 

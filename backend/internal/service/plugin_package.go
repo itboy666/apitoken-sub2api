@@ -261,6 +261,9 @@ func (i *PluginPackageInstaller) inspectArchive(archive *zip.Reader) (PluginMani
 	if err != nil {
 		return PluginManifest{}, nil, "", err
 	}
+	if manifest.IsPaymentPlugin() && signatureStatus != PluginSignatureTrusted {
+		return PluginManifest{}, nil, "", errors.New("支付插件必须使用可信发布者签名，不能使用未签名开发包")
+	}
 	return manifest, manifestRaw, signatureStatus, nil
 }
 

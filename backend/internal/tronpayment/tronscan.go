@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
 	"net/http"
 	"net/url"
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	"github.com/btcsuite/btcd/btcutil/base58"
+	"github.com/shopspring/decimal"
 )
 
 const (
@@ -41,15 +43,36 @@ var (
 )
 
 type Config struct {
-	WalletAddress  string `json:"wallet_address"`
-	TronscanAPIKey string `json:"tronscan_api_key"`
+	WalletAddress  string  `json:"wallet_address"`
+	TronscanAPIKey string  `json:"tronscan_api_key"`
+	RateCNY        float64 `json:"rate_cny"`
+	FeeEnabled     bool    `json:"fee_enabled"`
+	FeeRate        float64 `json:"fee_rate"`
+}
+
+// ValidateConfigObject runs before any map normalization, so duplicate keys,
+// nulls and oversized input cannot bypass the typed configuration parser.
+func ValidateConfigObject(raw []byte) error {
+	if len(raw) == 0 || len(raw) > 4096 || rejectDuplicateKeys(raw) != nil {
+		return errors.New("payment configuration must be a valid JSON object")
+	}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(raw, &fields) != nil || fields == nil {
+		return errors.New("payment configuration must be a JSON object")
+	}
+	for _, value := range fields {
+		if bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+			return errors.New("payment configuration fields cannot be null")
+		}
+	}
+	return nil
 }
 
 // ParseConfig rejects fields outside this read-only collection capability.
 func ParseConfig(raw []byte) (Config, error) {
-	var cfg Config
-	if len(raw) == 0 || len(raw) > 4096 || rejectDuplicateKeys(raw) != nil {
-		return cfg, errors.New("payment configuration must be a valid JSON object")
+	cfg := Config{RateCNY: 6.5}
+	if err := ValidateConfigObject(raw); err != nil {
+		return Config{}, err
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
@@ -70,7 +93,20 @@ func (c Config) Validate() error {
 	if !keyPattern.MatchString(c.TronscanAPIKey) {
 		return errors.New("tronscan_api_key is required and must be a valid API key")
 	}
+	if math.IsNaN(c.RateCNY) || math.IsInf(c.RateCNY, 0) || c.RateCNY < 0.0001 || c.RateCNY > 100000 || !decimal.NewFromFloat(c.RateCNY).Equal(decimal.NewFromFloat(c.RateCNY).Round(4)) {
+		return errors.New("汇率必须为 0.0001–100000，最多 4 位小数")
+	}
+	if math.IsNaN(c.FeeRate) || math.IsInf(c.FeeRate, 0) || c.FeeRate < 0 || c.FeeRate > 100 || !decimal.NewFromFloat(c.FeeRate).Equal(decimal.NewFromFloat(c.FeeRate).Round(2)) {
+		return errors.New("USDT 手续费率必须为 0–100%，最多 2 位小数")
+	}
 	return nil
+}
+
+func (c Config) EffectiveFeeRate() float64 {
+	if c.FeeEnabled {
+		return c.FeeRate
+	}
+	return 0
 }
 
 func ValidAddress(address string) bool {

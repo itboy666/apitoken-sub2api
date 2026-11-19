@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/tronpayment"
 	pluginv1 "github.com/Wei-Shaw/sub2api/pkg/pluginapi/v1"
 	hclog "github.com/hashicorp/go-hclog"
 	hcplugin "github.com/hashicorp/go-plugin"
@@ -158,6 +159,7 @@ func (r *pluginRuntime) validateAndApplyConfig(ctx context.Context, configJSON [
 }
 
 func (r *pluginRuntime) validateAndApplyNormalizedConfig(ctx context.Context, configJSON []byte) ([]byte, error) {
+	inputConfig := append([]byte(nil), configJSON...)
 	validation, err := r.api.ValidateConfig(ctx, &pluginv1.ValidateConfigRequest{ConfigJson: configJSON})
 	if err != nil {
 		return nil, fmt.Errorf("插件配置校验失败: %w", err)
@@ -170,6 +172,13 @@ func (r *pluginRuntime) validateAndApplyNormalizedConfig(ctx context.Context, co
 	}
 	if len(configJSON) == 0 || len(configJSON) > pluginConfigMaxBytes || !json.Valid(configJSON) {
 		return nil, errors.New("插件返回的规范化配置不是有效且大小受限的 JSON")
+	}
+	if r.installation != nil && r.installation.Manifest.IsPaymentPlugin() {
+		input, inputErr := tronpayment.ParseConfig(inputConfig)
+		output, outputErr := tronpayment.ParseConfig(configJSON)
+		if inputErr != nil || outputErr != nil || input != output {
+			return nil, errors.New("支付插件不得改写收款地址、密钥、汇率或手续费配置")
+		}
 	}
 	var normalized any
 	if err := json.Unmarshal(configJSON, &normalized); err != nil {

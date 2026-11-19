@@ -1,6 +1,7 @@
 package service
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -32,15 +33,49 @@ func TestUSDTExactCNYConversion(t *testing.T) {
 		cny   float64
 		micro int64
 	}{{6.5, 1000000}, {65, 10000000}, {10, 1540000}, {0.01, 10000}} {
-		n, e := usdtBaseMicro(tt.cny)
+		n, e := usdtBaseMicro(tt.cny, 6.5)
 		require.NoError(t, e)
 		require.Equal(t, tt.micro, n)
 	}
-	_, e := usdtBaseMicro(-1)
+	_, e := usdtBaseMicro(-1, 6.5)
 	require.Error(t, e)
 }
+
+func TestUSDTIndependentOrderPricing(t *testing.T) {
+	cfg := &PaymentConfig{RechargeFeeRate: 99, SubscriptionUSDToCNYRate: 7}
+	for _, tt := range []struct {
+		enabled            bool
+		rate, fee, wantPay float64
+	}{
+		{false, 7.1, 4, 100}, {true, 7.1, 2.75, 102.75}, {true, 6.5, 0, 100},
+	} {
+		plugin := tronpayment.Config{RateCNY: tt.rate, FeeEnabled: tt.enabled, FeeRate: tt.fee}
+		fee, pay, err := quoteUSDTOrder(plugin, cfg, payment.OrderTypeBalance, 100)
+		require.NoError(t, err)
+		require.Equal(t, tt.wantPay, pay)
+		if tt.enabled {
+			require.Equal(t, tt.fee, fee)
+		} else {
+			require.Zero(t, fee)
+		}
+	}
+	micro, err := usdtBaseMicro(71, 7.1)
+	require.NoError(t, err)
+	require.Equal(t, int64(10_000_000), micro)
+	_, err = usdtBaseMicro(71, 0)
+	require.Error(t, err)
+}
+
+func TestUSDTHostRejectsAmbiguousConfigBeforeNormalization(t *testing.T) {
+	old := json.RawMessage(`{"wallet_address":"TWwECvk3qmaXWvQd6FrGU5rK6AJ78dyFB9","tronscan_api_key":"fixture-api-key-not-secret"}`)
+	for _, fields := range []string{`"fee_rate":0,"fee_rate":4`, `"rate_cny":null`, `"tronscan_api_key":17`, `"api_url":"http://localhost"`} {
+		raw := []byte(`{"wallet_address":"TWwECvk3qmaXWvQd6FrGU5rK6AJ78dyFB9",` + fields + `}`)
+		_, err := mergePaymentPluginSecret(raw, old)
+		require.Error(t, err, fields)
+	}
+}
 func TestUSDTSecretMaskAndPreserve(t *testing.T) {
-	raw := json.RawMessage(`{"wallet_address":"wallet","tronscan_api_key":"secret-key-value"}`)
+	raw := json.RawMessage(`{"wallet_address":"TWwECvk3qmaXWvQd6FrGU5rK6AJ78dyFB9","tronscan_api_key":"secret-key-value-123"}`)
 	masked, e := maskPaymentPluginConfig(raw)
 	require.NoError(t, e)
 	require.NotContains(t, string(masked), "secret-key-value")
@@ -61,7 +96,7 @@ func TestUSDTPostgresClaims(t *testing.T) {
 	defer db.Close()
 	client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, db)))
 	require.NoError(t, client.Schema.Create(ctx))
-	for _, name := range []string{"229_plugins.sql", "388_usdt_payment_plugin.sql", "389_usdt_active_amount_reservations.sql"} {
+	for _, name := range []string{"229_plugins.sql", "388_usdt_payment_plugin.sql", "389_usdt_active_amount_reservations.sql", "390_usdt_configurable_pricing.sql"} {
 		b, e := migrations.FS.ReadFile(name)
 		require.NoError(t, e)
 		_, e = db.ExecContext(ctx, string(b))
@@ -79,13 +114,18 @@ func TestUSDTPostgresClaims(t *testing.T) {
 	require.NoError(t, e)
 	_, e = db.ExecContext(ctx, `INSERT INTO sub2api_plugin_bindings(plugin_id,capability,platform,account_type,enabled) VALUES($1,$2,'payment','none',TRUE)`, pluginID, PluginCapabilityUSDTTRC20)
 	require.NoError(t, e)
-	svc := &PaymentService{entClient: client}
-	makeOrder := func(state string) (*dbent.PaymentOrder, *usdtInvoice) {
+	svc := &PaymentService{entClient: client, configService: &PaymentConfigService{}}
+	makeOrder := func(state string, rates ...float64) (*dbent.PaymentOrder, *usdtInvoice) {
 		o, e := client.PaymentOrder.Create().SetUserID(u.ID).SetUserEmail(u.Email).SetUserName(u.Username).SetAmount(65).SetPayAmount(65).SetFeeRate(0).SetRechargeCode("test-" + generateOutTradeNo()).SetOutTradeNo(generateOutTradeNo()).SetPaymentType(PaymentTypeUSDTPlugin).SetProviderKey(PaymentTypeUSDTPlugin).SetPaymentTradeNo("").SetOrderType(payment.OrderTypeBalance).SetStatus(state).SetExpiresAt(time.Now().Add(time.Minute)).SetClientIP("127.0.0.1").SetSrcHost("example.test").Save(ctx)
 		require.NoError(t, e)
 		tx, e := client.Tx(ctx)
 		require.NoError(t, e)
-		e = reserveUSDTInvoice(ctx, tx, o, CreateOrderRequest{usdtPluginID: pluginID, usdtWallet: "TWwECvk3qmaXWvQd6FrGU5rK6AJ78dyFB9"})
+		e = reserveUSDTInvoice(ctx, tx, o, CreateOrderRequest{usdtPluginID: pluginID, usdtRateCNY: func() float64 {
+			if len(rates) > 0 {
+				return rates[0]
+			}
+			return 6.5
+		}(), usdtWallet: "TWwECvk3qmaXWvQd6FrGU5rK6AJ78dyFB9"})
 		require.NoError(t, e)
 		require.NoError(t, tx.Commit())
 		i, e := svc.usdtInvoice(ctx, o.ID)
@@ -96,6 +136,15 @@ func TestUSDTPostgresClaims(t *testing.T) {
 		return &api.VerifyPaymentResponse{Paid: true, TransactionHash: hash, ContractAddress: tronpayment.ContractAddress, ToAddress: i.Wallet, FromAddress: "TFBu1Z7SdGyWxLrKyov8GuKttoJRU3xKox", AmountMicro: i.AmountMicro, Block: 1, TimestampMs: i.CreatedAt.UnixMilli(), Confirmations: 20}
 	}
 	o, i := makeOrder(OrderStatusPending)
+	require.Equal(t, "6.5000", i.RateCNY)
+	_, priced := makeOrder(OrderStatusPending, 13)
+	require.Equal(t, "13.0000", priced.RateCNY)
+	original, e := svc.usdtInvoice(ctx, o.ID)
+	require.NoError(t, e)
+	require.Equal(t, i, original)
+	checkout, e := svc.usdtCheckout(ctx, o)
+	require.NoError(t, e)
+	require.Equal(t, "6.5", checkout.ExchangeRate)
 	p := proof(i, hashFor("a"))
 	require.Error(t, svc.requireUSDTClaim(ctx, o, p.TransactionHash, 65))
 	var wg sync.WaitGroup
@@ -146,7 +195,7 @@ func TestUSDTNativeRuntime(t *testing.T) {
 	b, e := os.ReadFile(path)
 	require.NoError(t, e)
 	hash := sha256.Sum256(b)
-	inst := &PluginInstallation{PluginKey: "local.apitoken.usdt-trc20", Version: "1.0.2", BinaryPath: path, BinarySHA256: hex.EncodeToString(hash[:])}
+	inst := &PluginInstallation{PluginKey: "local.apitoken.usdt-trc20", Version: "1.1.0", BinaryPath: path, BinarySHA256: hex.EncodeToString(hash[:])}
 	socket, e := os.MkdirTemp("/tmp", "usdt-sock-")
 	require.NoError(t, e)
 	defer os.RemoveAll(socket)
@@ -164,13 +213,35 @@ func TestUSDTNativeRuntime(t *testing.T) {
 }
 
 func TestUSDTSignedPackageLifecycle(t *testing.T) {
-	versions := []string{"2.23.0-apitoken.6", "2.23.0-apitoken.7", "2.23.0-apitoken.8"}
+	versions := []string{"2.23.0-apitoken.9"}
 	if candidate := os.Getenv("SUB2API_TEST_CANDIDATE_HOST_VERSION"); candidate != "" {
 		versions = append(versions, candidate)
 	}
 	for _, version := range versions {
 		t.Run(version, func(t *testing.T) { testUSDTSignedPackageLifecycle(t, version) })
 	}
+}
+
+func TestUSDTPackageRequiresSignatureEvenWithDevelopmentOverride(t *testing.T) {
+	path := os.Getenv("USDT_PLUGIN_PACKAGE")
+	if path == "" {
+		t.Skip("signed payment package required")
+	}
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	archive, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
+	require.NoError(t, err)
+	var stripped bytes.Buffer
+	writer := zip.NewWriter(&stripped)
+	for _, file := range archive.File {
+		if file.Name != "signature.json" {
+			require.NoError(t, writer.Copy(file))
+		}
+	}
+	require.NoError(t, writer.Close())
+	installer := NewPluginPackageInstaller(testPluginConfig(t.TempDir(), true), PluginHostInfo{Version: "2.23.0-apitoken.9"})
+	_, err = installer.Install(t.Context(), bytes.NewReader(stripped.Bytes()), nil)
+	require.ErrorContains(t, err, "支付插件必须使用可信发布者签名")
 }
 
 func testUSDTSignedPackageLifecycle(t *testing.T, version string) {
@@ -192,6 +263,7 @@ func testUSDTSignedPackageLifecycle(t *testing.T, version string) {
 	require.True(t, p.Manifest.IsPaymentPlugin())
 	require.True(t, EvaluatePluginCompatibility(p.Manifest, PluginHostInfo{Version: "2.24.0-apitoken.1"}).Compatible)
 	require.False(t, EvaluatePluginCompatibility(p.Manifest, PluginHostInfo{Version: "3.0.0-apitoken.1"}).Compatible)
+	require.False(t, EvaluatePluginCompatibility(p.Manifest, PluginHostInfo{Version: "2.23.0-apitoken.8"}).Compatible)
 	require.Equal(t, PluginSignatureTrusted, p.SignatureStatus)
 	cfg := json.RawMessage(`{"wallet_address":"TWwECvk3qmaXWvQd6FrGU5rK6AJ78dyFB9","tronscan_api_key":"fixture-api-key-not-secret"}`)
 	masked, e := m.SaveConfig(t.Context(), p.ID, cfg)
@@ -249,7 +321,7 @@ func TestUSDTPostgresAmountReservations(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 	client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, db)))
-	for _, name := range []string{"388_usdt_payment_plugin.sql", "389_usdt_active_amount_reservations.sql"} {
+	for _, name := range []string{"388_usdt_payment_plugin.sql", "389_usdt_active_amount_reservations.sql", "390_usdt_configurable_pricing.sql"} {
 		migration, err := migrations.FS.ReadFile(name)
 		require.NoError(t, err)
 		_, err = db.ExecContext(ctx, string(migration))
@@ -268,7 +340,7 @@ func TestUSDTPostgresAmountReservations(t *testing.T) {
 		}
 		defer tx.Rollback()
 		order := &dbent.PaymentOrder{ID: id + int64(n), OutTradeNo: fmt.Sprintf("allocation-%d-%d", id, n), PayAmount: 6.5, CreatedAt: start, ExpiresAt: start.Add(30 * time.Minute)}
-		err = reserveUSDTInvoiceWithOffset(ctx, tx, order, CreateOrderRequest{usdtPluginID: 1, usdtWallet: wallet}, offset)
+		err = reserveUSDTInvoiceWithOffset(ctx, tx, order, CreateOrderRequest{usdtPluginID: 1, usdtRateCNY: 6.5, usdtWallet: wallet}, offset)
 		if err != nil {
 			return 0, err
 		}

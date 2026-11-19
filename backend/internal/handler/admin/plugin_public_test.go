@@ -76,6 +76,8 @@ func publicWebsiteRouter(t *testing.T) (*gin.Engine, *publicWebsiteRepo) {
 	handler := NewPluginHandler(manager)
 	router := gin.New()
 	router.GET("/api/v1/plugins/public", handler.ListPublic)
+	router.POST("/test/plugins/:id/ui-session", handler.CreateUISession)
+	router.GET("/api/v1/plugin-ui/:token/*path", handler.ServeUIAsset)
 	router.GET("/api/v1/plugins/public/:id/assets/:hash/*path", handler.ServePublicAsset)
 	return router, repo
 }
@@ -154,4 +156,28 @@ func TestPublicWebsitePluginReadFailureDoesNotLeakInternals(t *testing.T) {
 	require.Equal(t, http.StatusInternalServerError, recorder.Code)
 	require.Equal(t, "no-store", recorder.Header().Get("Cache-Control"))
 	require.NotContains(t, recorder.Body.String(), "secret database")
+}
+
+func TestPluginConfigUIDirectNavigationRetainsOpaqueOriginSandbox(t *testing.T) {
+	router, _ := publicWebsiteRouter(t)
+	session := httptest.NewRecorder()
+	router.ServeHTTP(session, httptest.NewRequest(http.MethodPost, "/test/plugins/7/ui-session", nil))
+	require.Equal(t, http.StatusOK, session.Code)
+	require.Contains(t, session.Header().Get("Cache-Control"), "no-store")
+	var body struct {
+		Data struct {
+			URL string `json:"url"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(session.Body.Bytes(), &body))
+	asset := httptest.NewRecorder()
+	router.ServeHTTP(asset, httptest.NewRequest(http.MethodGet, strings.Split(body.Data.URL, "#")[0], nil))
+	require.Equal(t, http.StatusOK, asset.Code)
+	csp := asset.Header().Get("Content-Security-Policy")
+	for _, rule := range []string{"sandbox allow-scripts;", "connect-src 'none'", "form-action 'none'", "frame-ancestors 'self'"} {
+		require.Contains(t, csp, rule)
+	}
+	require.NotContains(t, csp, "allow-same-origin")
+	require.NotContains(t, csp, "allow-top-navigation")
+	require.Contains(t, asset.Header().Get("Cache-Control"), "no-store")
 }

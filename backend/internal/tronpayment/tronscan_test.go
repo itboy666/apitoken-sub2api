@@ -69,7 +69,7 @@ func TestFindPaymentAuthenticity(t *testing.T) {
 			addr := row(l)["to"].(string)
 			invoice := Invoice{OrderID: "test-order", Address: addr, AmountMicro: "128000000", CreatedAt: time.UnixMilli(ts - 1000), ExpiresAt: time.UnixMilli(ts + 1000)}
 			tt.mutate(l, d)
-			c, e := New(Config{WalletAddress: addr, TronscanAPIKey: "test-api-key-never-secret"})
+			c, e := New(Config{RateCNY: 6.5, WalletAddress: addr, TronscanAPIKey: "test-api-key-never-secret"})
 			require.NoError(t, e)
 			c.http.Transport = roundTripper(func(r *http.Request) (*http.Response, error) {
 				require.Equal(t, "https", r.URL.Scheme)
@@ -98,7 +98,7 @@ func TestVerifierRejectsMalformedAndRedirects(t *testing.T) {
 	for _, amount := range []string{"0", "-1", "1e6", "01", "1.0", "NaN", strings.Repeat("9", 78)} {
 		require.False(t, ValidMicroAmount(amount))
 	}
-	c, e := New(Config{WalletAddress: "TWwECvk3qmaXWvQd6FrGU5rK6AJ78dyFB9", TronscanAPIKey: "test-api-key-never-secret"})
+	c, e := New(Config{RateCNY: 6.5, WalletAddress: "TWwECvk3qmaXWvQd6FrGU5rK6AJ78dyFB9", TronscanAPIKey: "test-api-key-never-secret"})
 	require.NoError(t, e)
 	require.ErrorIs(t, c.http.CheckRedirect(&http.Request{}, nil), http.ErrUseLastResponse)
 	c.http.Transport = roundTripper(func(*http.Request) (*http.Response, error) {
@@ -107,4 +107,38 @@ func TestVerifierRejectsMalformedAndRedirects(t *testing.T) {
 	e = c.Test(context.Background())
 	require.Error(t, e)
 	require.NotContains(t, e.Error(), "secret-api-body")
+}
+
+func TestConfigIndependentPricingAndValidation(t *testing.T) {
+	base := `"wallet_address":"TWwECvk3qmaXWvQd6FrGU5rK6AJ78dyFB9","tronscan_api_key":"fixture-api-key-not-secret"`
+	legacy, err := ParseConfig([]byte("{" + base + "}"))
+	require.NoError(t, err)
+	require.Equal(t, 6.5, legacy.RateCNY)
+	require.Zero(t, legacy.EffectiveFeeRate())
+	for _, enabled := range []bool{false, true} {
+		cfg := legacy
+		cfg.RateCNY, cfg.FeeRate, cfg.FeeEnabled = 7.1234, 2.75, enabled
+		raw, err := json.Marshal(cfg)
+		require.NoError(t, err)
+		actual, err := ParseConfig(raw)
+		require.NoError(t, err)
+		require.Equal(t, cfg, actual)
+		if enabled {
+			require.Equal(t, 2.75, actual.EffectiveFeeRate())
+		} else {
+			require.Zero(t, actual.EffectiveFeeRate())
+		}
+	}
+	for _, fields := range []string{
+		`"rate_cny":0`, `"rate_cny":-1`, `"rate_cny":100001`, `"rate_cny":6.12345`,
+		`"rate_cny":null`, `"rate_cny":"<img src=x onerror=alert(1)>"`, `"rate_cny":{}`,
+		`"rate_cny":6.5,"rate_cny":7`, `"fee_rate":-1`, `"fee_rate":100.01`,
+		`"fee_rate":1.001`, `"fee_rate":"4"`, `"fee_enabled":"false"`, `"fee_enabled":null`,
+		`"api_url":"http://127.0.0.1"`, `"contract":"fake"`, `"__proto__":{}`, `"fee_rate":1e999`,
+	} {
+		t.Run(fields, func(t *testing.T) {
+			_, err := ParseConfig([]byte("{" + base + "," + fields + "}"))
+			require.Error(t, err)
+		})
+	}
 }

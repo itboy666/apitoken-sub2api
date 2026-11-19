@@ -19,9 +19,9 @@ import (
 
 const (
 	apitokenUpdateChannel = "apitoken"
-	// Older builds do not understand the combined-release contract. In
-	// particular .6 is incompatible with the amount-reservation migration.
-	minimumAPITokenUpdate = "2.23.0-apitoken.8"
+	// Older builds cannot safely display or process invoices issued with
+	// independently configured pricing after migration 390.
+	minimumAPITokenUpdate = "2.23.0-apitoken.9"
 	apitokenReleaseABI    = "apitoken-v1"
 )
 

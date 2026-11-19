@@ -1005,6 +1005,18 @@ describe('PaymentView provider and method fees', () => {
     expect(submit.text()).toContain(formatPaymentAmount(100, 'CNY'))
   })
 
+  it.each([0, 1.25])('uses the independent USDT fee %s instead of the global fee', async (rate) => {
+    const wrapper = await mountRecharge({
+      usdt_trc20_plugin: { ...baseMethod, fee_rate: rate, fee_rate_min: rate, fee_rate_max: rate },
+    })
+    wrapper.findComponent(PaymentMethodSelector).vm.$emit('select', 'usdt_trc20_plugin')
+    await flushPromises()
+    const submit = wrapper.findAll('button').find(b => b.text().includes('payment.createOrder'))!
+    expect(submit.text()).toContain(formatPaymentAmount(100 + rate, 'CNY'))
+    expect(submit.text()).not.toContain(formatPaymentAmount(102, 'CNY'))
+    wrapper.unmount()
+  })
+
   it('shows a payable range instead of quoting the cheapest provider as a fixed price', async () => {
     const wrapper = await mountRecharge({ alipay: { ...baseMethod, fee_rate: 0.6, fee_rate_min: 0.6, fee_rate_max: 3 } })
     expect(wrapper.text()).toContain(`${formatPaymentAmount(100.6, 'CNY')} – ${formatPaymentAmount(103, 'CNY')}`)

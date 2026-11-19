@@ -1,14 +1,14 @@
 {
   "packages": {
     "extensions/releases/apitoken-support-widget-1.0.6.s2plugin": "bcc6303d28ca0c277bc51137d57fb11fd217146dadbec0eb7e3f2d90b919d3e9",
-    "extensions/releases/apitoken-usdt-trc20-1.0.2.s2plugin": "b9c70984a58e98264e684597366c9e6df98a34c4f0da2c662658d29cd7b0eb25"
+    "extensions/releases/apitoken-usdt-trc20-1.1.0.s2plugin": "41a459889a7901766c0c440e1845161b888ec6916ce7109cc2a555dc57d14b97"
   },
   "source_files": {
-    "backend/cmd/usdt-trc20-plugin/main.go": "28d2a72bea7f96060f44a252fcc4eb872f5d8b7bb25de70ad4e41093555df236",
+    "backend/cmd/usdt-trc20-plugin/main.go": "800a9a03ff9c4f45c9c4b5b1f0ec9e19fa058543c040d907de4c3b3c498c4366",
     "backend/internal/tronpayment/testdata/detail.json": "eb42da5b0dfa9b097c5145b73d77cdca55f518724a541816c14da4490e6911d4",
     "backend/internal/tronpayment/testdata/list.json": "c84524cc6757eb4ca30ddf8df32abad95e16125a04f14249f5bea245dc8e7e08",
-    "backend/internal/tronpayment/tronscan.go": "4dbfd966c9252358bb244667f7e08fb2f992b126868f733d2214af339347eea6",
-    "backend/internal/tronpayment/tronscan_test.go": "f9d8fb1f9df988e4b6f40c09763f3d767a5dc8deaf9d3339849ce371b02f495f",
+    "backend/internal/tronpayment/tronscan.go": "af93345d7033f8f5f59dfdd77b7d42824b1fe43bdf93e76cd849da648a77201d",
+    "backend/internal/tronpayment/tronscan_test.go": "036dd04877289666f98dfebcc02ec7cb5371aa3ecec56c9da8a03b11ffd5fb95",
     "backend/pkg/pluginapi/v1/manifest.schema.json": "ff9cb90d91360934ca954b96a309f0428e5bc171c388db5abf0532748cf4af2b",
     "backend/pkg/pluginapi/v1/manifest_schema_test.go": "51e454461a746008703df007d89ddcd77532ba4b2d6d9f1a582de935011cac9d",
     "backend/pkg/pluginapi/v1/plugin.pb.go": "7d88941a55224637b4e86ebf389db35dbbe4c12ffe4e8e2c2b489f88419af2f3",
@@ -27,11 +27,12 @@
     "extensions/support-widget/ui/config.js": "ddb550ff0521e2050c04c4547f314807a473704c1a31aa0f032f38ed16d23a2c",
     "extensions/support-widget/ui/index.html": "8497c25906ad23fccdc2e77575553f605bdec897f0ef5e8f1391e5dc6a726922",
     "extensions/usdt-trc20/.gitignore": "b7b5a9a5bdb3a876455f7320f221592c77a378fac89c0283dc6ebe19b124bf43",
-    "extensions/usdt-trc20/README.md": "f7e68d613c9cf30e9b798b88d34b4126eca82a3d9392f94ec639c5d4ccb7b197",
+    "extensions/usdt-trc20/README.md": "480f303b5f208dc69dc1634bef3ae28aad10312f5b762b89c09dd8be7dd1efd2",
     "extensions/usdt-trc20/build.py": "5d427e821831332ce7bfa385f15bcfcc23675351a29efe6cc415f5b9c2383275",
-    "extensions/usdt-trc20/manifest.template.json": "4e3c00a9567dfe933e4032cb2dc2c2b4a18431d865e0282005664b199cd84d27",
-    "extensions/usdt-trc20/ui/config.js": "42dfd750f6a4cf8aefa0d7310ab2ead75d45fce6df50e6659e25db224230bef3",
-    "extensions/usdt-trc20/ui/index.html": "482d95bc3fc673fd0e65ae600df58dce93f1e0e677caca0944891562c8fae0ac",
-    "extensions/usdt-trc20/ui/style.css": "bf731b34a4c43f6869ed4503d5016f6c48bf927831be76673a85e3315046d0c4"
+    "extensions/usdt-trc20/manifest.template.json": "8cca7e8e6188cf138a69dcc3203768b607879fb04fa280ffb86b521c0e480d24",
+    "extensions/usdt-trc20/ui/config.js": "11e6839782413ab720dc91e8313d3ffcfc31fa46905f8519999073dd6d03661a",
+    "extensions/usdt-trc20/ui/index.html": "8bb7c238733c0a8c4d90dc9450b923e674724e59fb64b24e897b0fd51e027b04",
+    "extensions/usdt-trc20/ui/style.css": "5cb74328c93de564df7acd90261d9773bfc5b96fcc9ed4260a9e3bf7f0f8b8cc",
+    "extensions/usdt-trc20/__tests__/config.test.mjs": "cc678422d76ad3195314a87f52a0df37c943169cdd95e1246816211a60ca8712"
   }
 }

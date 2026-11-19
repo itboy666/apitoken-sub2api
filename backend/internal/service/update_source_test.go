@@ -114,9 +114,8 @@ func TestCombinedRollbackExcludesIncompatibleAndOfficialBuilds(t *testing.T) {
 	svc.currentVersion = "2.23.0-apitoken.11"
 	versions, err := svc.ListRollbackVersions(t.Context())
 	require.NoError(t, err)
-	require.Len(t, versions, 3)
+	require.Len(t, versions, 2)
 	require.Equal(t, "2.23.0-apitoken.10", versions[0].Version)
-	require.Equal(t, "2.23.0-apitoken.8", versions[2].Version)
 	require.ErrorIs(t, svc.RollbackToVersion(t.Context(), "2.23.0-apitoken.6"), ErrRollbackVersionNotAllowed)
 	require.ErrorIs(t, svc.Rollback(), ErrCustomLocalRollback)
 }

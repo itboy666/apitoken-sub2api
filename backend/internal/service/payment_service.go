@@ -73,6 +73,7 @@ func generateRandomString(n int) string {
 type CreateOrderRequest struct {
 	usdtPluginID    int64
 	usdtWallet      string
+	usdtRateCNY     float64
 	CouponID        int64
 	couponQuote     *CouponQuote
 	UserID          int64

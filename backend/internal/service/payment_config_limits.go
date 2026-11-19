@@ -41,8 +41,9 @@ func (s *PaymentConfigService) GetAvailableMethodLimits(ctx context.Context) (*M
 		pcApplyMethodFees(&ml, insts, globalFee)
 		resp.Methods[ml.PaymentType] = ml
 	}
-	if _, _, e := s.pluginManager.activePaymentPlugin(ctx); e == nil {
-		ml := MethodLimits{PaymentType: PaymentTypeUSDTPlugin, DisplayName: "USDT · TRC20", Currency: "CNY", FeeRate: globalFee, FeeRateMin: globalFee, FeeRateMax: globalFee}
+	if _, pluginCfg, e := s.pluginManager.activePaymentPlugin(ctx); e == nil {
+		fee := pluginCfg.EffectiveFeeRate()
+		ml := MethodLimits{PaymentType: PaymentTypeUSDTPlugin, DisplayName: "USDT · TRC20", Currency: "CNY", FeeRate: fee, FeeRateMin: fee, FeeRateMax: fee}
 		if cfg, cfgErr := s.GetPaymentConfig(ctx); cfgErr == nil {
 			ml.SingleMin, ml.SingleMax, ml.DailyLimit = cfg.MinAmount, cfg.MaxAmount, cfg.DailyLimit
 		}
@@ -100,6 +101,17 @@ func (s *PaymentConfigService) GetMethodLimits(ctx context.Context, types []stri
 	}
 	result := make([]MethodLimits, 0, len(types))
 	for _, pt := range types {
+		if pt == PaymentTypeUSDTPlugin {
+			if _, c, e := s.pluginManager.activePaymentPlugin(ctx); e == nil {
+				fee := c.EffectiveFeeRate()
+				ml := MethodLimits{PaymentType: pt, DisplayName: "USDT · TRC20", Currency: "CNY", FeeRate: fee, FeeRateMin: fee, FeeRateMax: fee}
+				if cfg, err := s.GetPaymentConfig(ctx); err == nil {
+					ml.SingleMin, ml.SingleMax, ml.DailyLimit = cfg.MinAmount, cfg.MaxAmount, cfg.DailyLimit
+				}
+				result = append(result, ml)
+			}
+			continue
+		}
 		var matching []*dbent.PaymentProviderInstance
 		for _, inst := range instances {
 			if payment.InstanceSupportsType(inst.SupportedTypes, pt) {

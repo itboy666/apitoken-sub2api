@@ -104,12 +104,12 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 		bonusAmount = q.BonusAmount
 		orderAmount = q.Credited
 	}
+	if req.PaymentType == PaymentTypeUSDTPlugin {
+		return s.createUSDTOrder(ctx, req, user, plan, cfg, orderAmount, limitAmount, bonusAmount)
+	}
 	payAmountStr, payAmount, err := calculateCreateOrderPayAmountForOrderType(limitAmount, feeRate, methodCurrency, req.OrderType, cfg.SubscriptionUSDToCNYRate)
 	if err != nil {
 		return nil, err
-	}
-	if req.PaymentType == PaymentTypeUSDTPlugin {
-		return s.createUSDTOrder(ctx, req, user, plan, cfg, orderAmount, limitAmount, feeRate, payAmount, bonusAmount)
 	}
 	if err := s.validateStripeFeeSelection(ctx, req); err != nil {
 		return nil, err
@@ -251,7 +251,7 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 	}
 	providerSnapshot := buildPaymentOrderProviderSnapshot(sel, req)
 	if req.PaymentType == PaymentTypeUSDTPlugin {
-		providerSnapshot = map[string]any{"schema_version": 1, "provider_key": PaymentTypeUSDTPlugin, "currency": "CNY", "plugin_id": req.usdtPluginID, "usdt_cny_rate": "6.5"}
+		providerSnapshot = map[string]any{"schema_version": 2, "provider_key": PaymentTypeUSDTPlugin, "currency": "CNY", "plugin_id": req.usdtPluginID, "usdt_cny_rate": decimal.NewFromFloat(req.usdtRateCNY).String(), "fee_source": "usdt_plugin", "fee_rate": feeRate}
 	}
 	if req.CouponID > 0 {
 		if providerSnapshot == nil {

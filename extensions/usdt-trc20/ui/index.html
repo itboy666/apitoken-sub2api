@@ -1,14 +1,16 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>USDT · TRC20 支付配置</title><link rel="stylesheet" href="style.css"></head>
 <body><main>
- <header><span class="eyebrow">APITOKEN / PAYMENT</span><div class="heading"><h1>USDT · TRC20</h1><span class="badge">人民币计价</span></div><p>链上收款，确认后自动充值。</p></header>
- <section class="rate" aria-label="结算汇率"><div><span>固定结算汇率</span><strong>1 <small>USDT</small><i> = </i>6.5 <small>CNY</small></strong></div><span class="rate-note">沿用网站充值规则<br>金额以订单为准</span></section>
- <p id="message" role="status" tabindex="-1">正在读取配置…</p>
+ <header><span class="eyebrow">APITOKEN / PAYMENT</span><div class="heading"><h1>USDT · TRC20</h1><span class="badge">独立计价</span></div><p>设置你的结算汇率与手续费，新订单按保存后的规则收款。</p></header>
+ <p id="message" role="status" aria-live="polite" tabindex="-1">正在读取配置…</p>
  <form id="form"><fieldset id="fields" disabled>
-  <label for="wallet">TRON 收款地址</label><input id="wallet" autocomplete="off" spellcheck="false" placeholder="以 T 开头的 TRON 地址" aria-describedby="wallet-help" required><p class="help" id="wallet-help">仅填写你的收款地址。请先处理所有待支付订单，再更换钱包。</p>
-  <label for="api-key">TronScan API Key <span id="key-state"></span></label><input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="填写 API Key" aria-describedby="key-help"><p class="help" id="key-help">在服务器加密保存，不向付款用户公开。已保存时留空表示保留原 Key。</p>
-  <div class="actions"><button id="save" type="button">保存配置</button><button id="test" class="secondary" type="button">测试 TronScan 连接</button></div>
+  <section class="rate" aria-labelledby="rate-label"><div class="rate-editor"><label id="rate-label" for="rate">结算汇率 · 1 USDT 折合人民币</label><div class="rate-value"><span>1 <small>USDT</small> =</span><input id="rate" type="text" inputmode="decimal" autocomplete="off" value="6.5" aria-describedby="rate-help rate-error" required><small>CNY</small></div><p class="help" id="rate-help">可填写 0.0001–100000，最多 4 位小数。</p><p id="rate-error" class="field-error" hidden></p></div></section>
+  <section class="fee-card" aria-labelledby="fee-title"><div class="fee-heading"><div><h2 id="fee-title">USDT 专属手续费</h2><p class="help">独立于系统统一手续费，仅对 USDT 支付生效。</p></div><label class="switch-label" for="fee-enabled"><input id="fee-enabled" type="checkbox" role="switch"><span>收取手续费</span></label></div><div class="fee-input"><label for="fee-rate">手续费比例</label><div class="input-unit"><input id="fee-rate" type="text" inputmode="decimal" autocomplete="off" value="0" aria-describedby="fee-help fee-error" disabled><span>%</span></div><p class="help" id="fee-help">关闭后手续费为 0；开启时可设置 0–100%，最多 2 位小数。</p><p id="fee-error" class="field-error" hidden></p></div><p id="quote-preview" class="quote-preview" aria-live="polite"></p></section>
+  <div class="lock-note"><strong>已创建的订单锁定计价规则</strong><p>修改汇率或手续费只影响新订单。已有订单仍按原金额、汇率和有效期收款。</p></div>
+  <label for="wallet">TRON 收款地址</label><input id="wallet" autocomplete="off" spellcheck="false" placeholder="以 T 开头的 TRON 地址" aria-describedby="wallet-help wallet-error" required><p class="help" id="wallet-help">仅填写你的收款地址。请先处理所有待支付订单，再更换钱包。</p><p id="wallet-error" class="field-error" hidden></p>
+  <label for="api-key">TronScan API Key <span id="key-state"></span></label><input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="填写 API Key" aria-describedby="key-help key-error"><p class="help" id="key-help">在服务器加密保存，不向付款用户公开。已保存时留空表示保留原 Key。</p><p id="key-error" class="field-error" hidden></p>
+  <div class="actions"><button id="save" type="button">保存配置</button><button id="test" class="secondary" type="button">测试已保存配置</button></div>
  </fieldset></form>
- <section class="checks" aria-label="到账规则"><h2>只为核实的 USDT 入账</h2><ul><li>固定核对官方 USDT 合约、收款地址和精确金额</li><li>交易成功，且至少获得 20 次链上确认</li><li>同一交易只能使用一次；TRX 与同名假币不入账</li></ul><details><summary>订单金额与超时规则</summary><p>宿主 .7 起：人民币应付金额 ÷ 6.5，向上保留 2 位小数，再随机加 0.00–0.09 USDT；有效期内金额冲突时逐次增加 0.01 USDT。尾数不增加余额；取消或支付后仍保留金额至原到期时间。旧订单保持原精确金额。兼容宿主 .6 时仍使用原六位小数规则。</p><p>仅接受订单有效期内发生的转账。确认延迟可在到期后 3 小时内补核验；已取消、超时转账或金额不符需要人工核对。插件不持有私钥，不发起转账或自动退款。</p></details></section>
- <footer>在插件管理中启用后，网站将显示 USDT 付款入口。停用会暂停链上核验。</footer>
+ <section class="checks" aria-label="到账规则"><h2>只为核实的 USDT 入账</h2><ul><li>固定核对官方 USDT 合约、收款地址和精确金额</li><li>交易成功，且至少获得 20 次链上确认</li><li>同一交易只能使用一次；TRX 与同名假币不入账</li></ul><details><summary>金额计算与超时规则</summary><p>人民币应付金额先加本插件配置的手续费，再除以保存的汇率，向上保留 2 位小数。随机增加 0.00–0.09 USDT；有效期内金额冲突时逐次增加 0.01 USDT。识别尾数不增加余额；已取消或已支付订单仍占用金额至原到期时间。</p><p>只接受订单有效期内发生的转账。确认延迟可在到期后 3 小时内补核验。插件不持有私钥，不发起转账或自动退款。</p></details></section>
+ <footer>配置保存后对新订单生效。在插件管理中停用后，USDT 入口与链上核验暂停。</footer>
 </main><script src="config.js"></script></body></html>
