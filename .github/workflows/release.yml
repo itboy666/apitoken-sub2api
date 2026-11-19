@@ -39,6 +39,9 @@ env:
 
 jobs:
   prepare:
+    # The APIToken distribution publishes through apitoken-release.yml. Its
+    # custom tags must never be sent through the upstream binary/image pipeline.
+    if: github.repository == 'ranxi2001/sub2api' && !contains(github.ref_name, '-apitoken.') && !contains(inputs.tag, '-apitoken.')
     runs-on: ubuntu-latest
     outputs:
       sha: ${{ steps.plan.outputs.sha }}

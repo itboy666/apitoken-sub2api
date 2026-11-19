@@ -19,6 +19,15 @@ export default {
 
   // Version Badge
   version: {
+    upstreamBase: '官方基础版本',
+    combinedSource: '合并版更新源',
+    sourceNotConnected: '待连接',
+    combinedPending: '合并版更新源待连接',
+    combinedUpdateHint: '官方更新会先与站点定制功能合并，通过验证后发布到这里。',
+    combinedSetupHint: '连接专属发布仓库后，即可在这里检查并安装合并版。',
+    combinedSourceBuildHint: '请在定制分支合并官方正式版，通过测试后构建并发布合并版。',
+    checkUnavailable: '暂时无法确认最新版本，请稍后刷新重试。',
+    notChecked: '尚未确认最新版本',
     currentVersion: '当前版本',
     latestVersion: '最新版本',
     upToDate: '已是最新版本',
@@ -30,7 +39,7 @@ export default {
     viewChangelog: '查看更新日志',
     refresh: '刷新',
     sourceMode: '源码构建',
-    sourceModeHint: '源码构建请使用 git pull 更新',
+    sourceModeHint: '源码构建请合并更新后重新编译部署',
     updateNow: '立即更新',
     updating: '正在更新...',
     updateComplete: '更新完成',

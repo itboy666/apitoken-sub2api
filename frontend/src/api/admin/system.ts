@@ -18,6 +18,11 @@ export interface VersionInfo {
   release_info?: ReleaseInfo
   cached: boolean
   warning?: string
+  update_channel?: string
+  update_repository?: string
+  upstream_version?: string
+  auto_update_enabled?: boolean
+  update_blocked_reason?: string
   build_type: string // "source" for manual builds, "release" for CI builds
 }
 

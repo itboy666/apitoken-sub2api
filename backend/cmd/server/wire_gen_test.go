@@ -12,12 +12,18 @@ import (
 
 func TestProvideServiceBuildInfo(t *testing.T) {
 	in := handler.BuildInfo{
-		Version:   "v-test",
-		BuildType: "release",
+		Version:          "v-test",
+		UpdateChannel:    "apitoken",
+		UpdateRepository: "example/combined",
+		UpstreamVersion:  "2.23.0",
+		BuildType:        "release",
 	}
 	out := provideServiceBuildInfo(in)
 	require.Equal(t, in.Version, out.Version)
 	require.Equal(t, in.BuildType, out.BuildType)
+	require.Equal(t, in.UpdateChannel, out.UpdateChannel)
+	require.Equal(t, in.UpdateRepository, out.UpdateRepository)
+	require.Equal(t, in.UpstreamVersion, out.UpstreamVersion)
 }
 
 func TestProvideCleanup_WithMinimalDependencies_NoPanic(t *testing.T) {

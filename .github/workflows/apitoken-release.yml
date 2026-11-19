@@ -1,0 +1,99 @@
+name: APIToken combined release
+
+on:
+  workflow_dispatch:
+    inputs:
+      official_tag:
+        description: '官方正式版标签，例如 v2.23.0；留空使用最新正式版'
+        required: false
+        type: string
+      publish:
+        description: '测试通过后发布合并版，供后台一键更新（关闭时仅生成构建产物）'
+        type: boolean
+        default: false
+
+concurrency:
+  group: apitoken-combined-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  combined:
+    if: github.repository != 'ranxi2001/sub2api' && github.repository != 'Wei-Shaw/sub2api' && github.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: apitoken_test
+          POSTGRES_PASSWORD: disposable_ci_only
+          POSTGRES_DB: apitoken_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U apitoken_test"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      OFFICIAL_TAG: ${{ inputs.official_tag }}
+      TARGET_BRANCH: ${{ github.ref_name }}
+      USDT_TEST_POSTGRES_DSN: postgres://apitoken_test:disposable_ci_only@127.0.0.1:5432/apitoken_test?sslmode=disable
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Merge the official stable release into a candidate
+        run: |
+          python3 -m unittest discover -s scripts/apitoken -p 'test_*.py'
+          git config user.name 'APIToken release'
+          git config user.email 'apitoken-release@users.noreply.github.com'
+          python3 scripts/apitoken/sync_upstream.py --tag "$OFFICIAL_TAG" --output "$RUNNER_TEMP/candidate.json"
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: frontend
+      - name: Verify updater, plugins, payment matching and custom interfaces
+        run: python3 scripts/apitoken/release.py test
+      - name: Build the verified combined release
+        run: |
+          test -z "$(git status --porcelain)"
+          python3 scripts/apitoken/release.py build --repository "$GITHUB_REPOSITORY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: apitoken-combined-release
+          path: dist/apitoken/
+          retention-days: 14
+      - name: Publish the tested source and release assets
+        if: inputs.publish
+        run: |
+          RELEASE_TAG="$(python3 -c 'import json,os; print(json.load(open(os.environ["RUNNER_TEMP"]+"/candidate.json"))["tag"])')"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          meta = json.loads((Path(os.environ['RUNNER_TEMP'])/'candidate.json').read_text())
+          text = f"基于官方 {meta['upstream_tag']} 的 APIToken 合并版，保留定制首页、认证页面、分组修复、客服和 USDT 支付插件。\n\n官方提交：{meta['upstream_commit']}\n合并提交：{meta['sha']}\n\n已通过更新隔离、签名插件、USDT 金额防重、分组及前端回归检查。发布包包含 SHA-256 校验和及对应源代码。首次由旧版迁移时，请先按 docs/apitoken-updates.md 升级配套插件。\n"
+          (Path(os.environ['RUNNER_TEMP'])/'release-notes.md').write_text(text)
+          PY
+          git tag -a "$RELEASE_TAG" -m "$RELEASE_TAG"
+          git push --atomic origin "HEAD:refs/heads/$TARGET_BRANCH" "refs/tags/$RELEASE_TAG"
+          gh release create "$RELEASE_TAG" dist/apitoken/* --repo "$GITHUB_REPOSITORY" --verify-tag --latest --prerelease=false --title "$RELEASE_TAG" --notes-file "$RUNNER_TEMP/release-notes.md"

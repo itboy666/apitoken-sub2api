@@ -1,0 +1,10 @@
+{
+  "repository": "ranxi2001/sub2api",
+  "tag": "v2.23.0",
+  "commit": "5bef330d5edf039fe390a2b17bb9dc2e5731ba92",
+  "customization_abi": "apitoken-v1",
+  "protected_migrations": {
+    "388_usdt_payment_plugin.sql": "b44407fb588ebc049d244deea164987063b30c122ea2db77b401605bc35d4325",
+    "389_usdt_active_amount_reservations.sql": "8eb41ec3e88e6c69400b962cbefcefa7c64e17620e1f09fa61f72f4f39d65a68"
+  }
+}

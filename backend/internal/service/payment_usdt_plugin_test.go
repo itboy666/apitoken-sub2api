@@ -146,7 +146,7 @@ func TestUSDTNativeRuntime(t *testing.T) {
 	b, e := os.ReadFile(path)
 	require.NoError(t, e)
 	hash := sha256.Sum256(b)
-	inst := &PluginInstallation{PluginKey: "local.apitoken.usdt-trc20", Version: "1.0.1", BinaryPath: path, BinarySHA256: hex.EncodeToString(hash[:])}
+	inst := &PluginInstallation{PluginKey: "local.apitoken.usdt-trc20", Version: "1.0.2", BinaryPath: path, BinarySHA256: hex.EncodeToString(hash[:])}
 	socket, e := os.MkdirTemp("/tmp", "usdt-sock-")
 	require.NoError(t, e)
 	defer os.RemoveAll(socket)
@@ -164,7 +164,11 @@ func TestUSDTNativeRuntime(t *testing.T) {
 }
 
 func TestUSDTSignedPackageLifecycle(t *testing.T) {
-	for _, version := range []string{"2.23.0-apitoken.6", "2.23.0-apitoken.7"} {
+	versions := []string{"2.23.0-apitoken.6", "2.23.0-apitoken.7", "2.23.0-apitoken.8"}
+	if candidate := os.Getenv("SUB2API_TEST_CANDIDATE_HOST_VERSION"); candidate != "" {
+		versions = append(versions, candidate)
+	}
+	for _, version := range versions {
 		t.Run(version, func(t *testing.T) { testUSDTSignedPackageLifecycle(t, version) })
 	}
 }
@@ -191,7 +195,9 @@ func testUSDTSignedPackageLifecycle(t *testing.T, version string) {
 	masked, e := m.SaveConfig(t.Context(), p.ID, cfg)
 	require.NoError(t, e)
 	require.NotContains(t, string(masked), "fixture-api-key")
-	_, e = m.Enable(t.Context(), p.ID, false, 100)
+	require.True(t, p.Compatibility.Compatible)
+	acceptCandidate := version == os.Getenv("SUB2API_TEST_CANDIDATE_HOST_VERSION")
+	_, e = m.Enable(t.Context(), p.ID, acceptCandidate, 100)
 	require.NoError(t, e)
 	require.Nil(t, m.route.Load())
 	require.NoError(t, m.reconcileOnce(t.Context()))

@@ -10,7 +10,8 @@
             ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:hover:bg-amber-900/50'
             : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-800 dark:text-dark-400 dark:hover:bg-dark-700'
         ]"
-        :title="hasUpdate ? t('version.updateAvailable') : t('version.upToDate')"
+        :title="versionStatus"
+        :aria-expanded="dropdownOpen"
       >
         <span v-if="currentVersion" class="font-medium">v{{ currentVersion }}</span>
         <span
@@ -31,8 +32,7 @@
         <div
           v-if="dropdownOpen"
           ref="dropdownRef"
-          class="absolute left-0 z-50 mt-2 overflow-hidden whitespace-normal rounded-xl border border-gray-200 bg-white shadow-lg transition-all duration-200 dark:border-dark-700 dark:bg-dark-800"
-          :class="rollbackPanelOpen && isReleaseBuild ? 'w-80' : 'w-64'"
+          class="absolute left-0 z-50 mt-2 overflow-hidden whitespace-normal rounded-xl border border-gray-200 bg-white shadow-lg transition-all duration-200 dark:border-dark-700 dark:bg-dark-800 w-80 max-w-[calc(100vw-2rem)]"
         >
           <!-- Header with refresh button -->
           <div
@@ -46,6 +46,7 @@
               class="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-dark-700 dark:hover:text-dark-200"
               :disabled="loading"
               :title="t('version.refresh')"
+              :aria-label="t('version.refresh')"
             >
               <Icon
                 name="refresh"
@@ -83,13 +84,13 @@
                 <div class="inline-flex items-center gap-2">
                   <span
                     v-if="currentVersion"
-                    class="text-2xl font-bold text-gray-900 dark:text-white"
+                    class="break-words text-xl font-bold text-gray-900 dark:text-white"
                     >v{{ currentVersion }}</span
                   >
                   <span v-else class="text-2xl font-bold text-gray-400 dark:text-dark-500">--</span>
                   <!-- Show check mark when up to date -->
                   <span
-                    v-if="!hasUpdate"
+                    v-if="verifiedCurrent"
                     class="flex h-5 w-5 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30"
                   >
                     <svg
@@ -106,13 +107,28 @@
                   </span>
                 </div>
                 <p class="mt-1 text-xs text-gray-500 dark:text-dark-400">
-                  {{
-                    hasUpdate
-                      ? t('version.latestVersion') + ': v' + latestVersion
-                      : t('version.upToDate')
-                  }}
+                  {{ versionStatus }}
                 </p>
               </div>
+
+              <div v-if="isCustomBuild" class="mb-4 space-y-2 rounded-lg bg-gray-50 p-3 text-xs dark:bg-dark-900/50">
+                <div class="flex justify-between gap-3">
+                  <span class="text-gray-500 dark:text-dark-400">{{ t('version.upstreamBase') }}</span>
+                  <span class="font-medium text-gray-700 dark:text-dark-200">v{{ upstreamVersion }}</span>
+                </div>
+                <div class="flex items-start justify-between gap-3">
+                  <span class="shrink-0 text-gray-500 dark:text-dark-400">{{ t('version.combinedSource') }}</span>
+                  <a v-if="updateRepository" :href="`https://github.com/${updateRepository}/releases`" target="_blank" rel="noopener noreferrer" class="min-w-0 break-words text-right text-primary-600 hover:underline dark:text-primary-400">{{ updateRepository }}</a>
+                  <span v-else class="text-gray-600 dark:text-dark-300">{{ t('version.sourceNotConnected') }}</span>
+                </div>
+                <p class="leading-5 text-gray-600 dark:text-dark-300">{{ t('version.combinedUpdateHint') }}</p>
+              </div>
+              <p v-if="versionWarning" role="status" class="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+                {{ t('version.checkUnavailable') }}
+              </p>
+              <p v-else-if="isCustomBuild && !isReleaseBuild" role="status" class="mb-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
+                {{ t(appStore.versionInfo?.update_blocked_reason === 'source_build' ? 'version.combinedSourceBuildHint' : 'version.combinedSetupHint') }}
+              </p>
 
               <!-- Priority 1: Update error (must check before hasUpdate) -->
               <div v-if="updateError" class="space-y-2">
@@ -286,13 +302,13 @@
                     />
                   </svg>
                   <p class="text-xs text-blue-600 dark:text-blue-400">
-                    {{ t('version.sourceModeHint') }}
+                    {{ t(isCustomBuild ? 'version.combinedSourceBuildHint' : 'version.sourceModeHint') }}
                   </p>
                 </div>
               </div>
 
               <!-- Priority 4: Update available for release build - show update button -->
-              <div v-else-if="hasUpdate && isReleaseBuild" class="space-y-2">
+              <div v-else-if="hasUpdate && isReleaseBuild && !versionWarning" class="space-y-2">
                 <!-- Update info card -->
                 <div
                   class="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800/50 dark:bg-amber-900/20"
@@ -414,7 +430,7 @@
                           />
                         </svg>
                         <p class="min-w-0 flex-1 text-xs leading-4 text-blue-600 dark:text-blue-400">
-                          {{ t('version.rollbackSourceHint') }}
+                          {{ t(isCustomBuild ? 'version.combinedSetupHint' : 'version.rollbackSourceHint') }}
                         </p>
                       </div>
 
@@ -469,7 +485,7 @@
 
                       <!-- Version list -->
                       <template v-else>
-                        <p class="px-0.5 text-[11px] text-gray-400 dark:text-dark-500">
+                        <p v-if="!isCustomBuild" class="px-0.5 text-[11px] text-gray-400 dark:text-dark-500">
                           {{ t('version.rollbackSelectVersion') }}
                         </p>
 
@@ -523,6 +539,7 @@
 
                             <!-- Terminal-style block with deploy-method tabs -->
                             <div
+                              v-if="!isCustomBuild"
                               class="overflow-hidden rounded-lg border border-gray-200 dark:border-dark-600"
                             >
                               <div
@@ -651,9 +668,9 @@ import {
 import { useClipboard } from '@/composables/useClipboard'
 import Icon from '@/components/icons/Icon.vue'
 
-const GITHUB_REPO = 'Wei-Shaw/sub2api'
+const GITHUB_REPO = 'ranxi2001/sub2api'
 // Docker Hub image published by CI (tags carry no "v" prefix, e.g. weishaw/sub2api:0.1.146)
-const DOCKER_IMAGE = 'weishaw/sub2api'
+const DOCKER_IMAGE = 'ghcr.io/ranxi2001/sub2api'
 
 const { t } = useI18n()
 
@@ -676,6 +693,17 @@ const latestVersion = computed(() => appStore.latestVersion)
 const hasUpdate = computed(() => appStore.hasUpdate)
 const releaseInfo = computed(() => appStore.releaseInfo)
 const buildType = computed(() => appStore.buildType)
+const isCustomBuild = computed(() => appStore.versionInfo?.update_channel === 'apitoken' || currentVersion.value.includes('-apitoken.'))
+const upstreamVersion = computed(() => appStore.versionInfo?.upstream_version || currentVersion.value.split('-')[0])
+const updateRepository = computed(() => appStore.versionInfo?.update_repository || '')
+const versionWarning = computed(() => appStore.versionInfo?.warning || '')
+const verifiedCurrent = computed(() => !!latestVersion.value && !hasUpdate.value && !versionWarning.value && !(isCustomBuild.value && !updateRepository.value))
+const versionStatus = computed(() => {
+  if (versionWarning.value) return t('version.checkUnavailable')
+  if (isCustomBuild.value && !updateRepository.value) return t('version.combinedPending')
+  if (hasUpdate.value) return t('version.latestVersion') + ': v' + latestVersion.value
+  return verifiedCurrent.value ? t('version.upToDate') : t('version.notChecked')
+})
 
 // Update process states (local to this component)
 const updating = ref(false)
@@ -729,7 +757,7 @@ const activeManualCommand = computed(() =>
 )
 
 // Only show update check for release builds (binary/docker deployment)
-const isReleaseBuild = computed(() => buildType.value === 'release')
+const isReleaseBuild = computed(() => appStore.versionInfo?.auto_update_enabled ?? (!isCustomBuild.value && buildType.value === 'release'))
 
 function toggleDropdown() {
   dropdownOpen.value = !dropdownOpen.value
@@ -752,7 +780,7 @@ async function refreshVersion(force = true) {
 }
 
 async function handleUpdate() {
-  if (updating.value) return
+  if (updating.value || !isReleaseBuild.value || versionWarning.value) return
 
   updating.value = true
   updateError.value = ''

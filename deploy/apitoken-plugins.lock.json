@@ -1,0 +1,37 @@
+{
+  "packages": {
+    "extensions/releases/apitoken-support-widget-1.0.6.s2plugin": "1f9a083fa2f1a390a495646fbadb17fc0773e9e17d8e47f0e6a9df0dc1da5489",
+    "extensions/releases/apitoken-usdt-trc20-1.0.2.s2plugin": "4d58bc973cdeed0210d52a41f4088447a078b11663e764af89b560247b40be9b"
+  },
+  "source_files": {
+    "backend/cmd/usdt-trc20-plugin/main.go": "28d2a72bea7f96060f44a252fcc4eb872f5d8b7bb25de70ad4e41093555df236",
+    "backend/internal/tronpayment/testdata/detail.json": "eb42da5b0dfa9b097c5145b73d77cdca55f518724a541816c14da4490e6911d4",
+    "backend/internal/tronpayment/testdata/list.json": "c84524cc6757eb4ca30ddf8df32abad95e16125a04f14249f5bea245dc8e7e08",
+    "backend/internal/tronpayment/tronscan.go": "4dbfd966c9252358bb244667f7e08fb2f992b126868f733d2214af339347eea6",
+    "backend/internal/tronpayment/tronscan_test.go": "f9d8fb1f9df988e4b6f40c09763f3d767a5dc8deaf9d3339849ce371b02f495f",
+    "backend/pkg/pluginapi/v1/manifest.schema.json": "ff9cb90d91360934ca954b96a309f0428e5bc171c388db5abf0532748cf4af2b",
+    "backend/pkg/pluginapi/v1/manifest_schema_test.go": "51e454461a746008703df007d89ddcd77532ba4b2d6d9f1a582de935011cac9d",
+    "backend/pkg/pluginapi/v1/plugin.pb.go": "7d88941a55224637b4e86ebf389db35dbbe4c12ffe4e8e2c2b489f88419af2f3",
+    "backend/pkg/pluginapi/v1/plugin.proto": "a0d0f49f09aae33363435a2de6e08a6373f403a379d337d7d8bec0e765003e54",
+    "backend/pkg/pluginapi/v1/plugin_grpc.pb.go": "f4fd53be9d0f5df335a8cacc27b34cdc031673a9b92d2c98824fcc04b80b4e26",
+    "backend/pkg/pluginapi/v1/runtime.go": "72b32af120f61617dec82bde6248082b8c39e99294925adc9184816bee06efe3",
+    "extensions/support-widget/README.md": "00a9587a7c4a8da7084d1dad4d3d18d61b45a5b2d4ff59043a92c3d34e6a1203",
+    "extensions/support-widget/__tests__/package.test.mjs": "969e4973da7330b4d074362f3553f638c3a5ed3312c74dc643bbbaabab866918",
+    "extensions/support-widget/build.py": "51358d1131b46bfdbcb469794d1dbb5db6d2bf74f3fc2e4b277c393af0b7fd02",
+    "extensions/support-widget/manifest.template.json": "ddd187421c78fbeebbe29e030f3eca1b1254f4ef3d9aa8f270d475a33d58f90d",
+    "extensions/support-widget/public/index.html": "21f2de66bb4d6a061239e4afa5c8cca50cb7b97a1e6a0a1996c483e08c38b9a4",
+    "extensions/support-widget/public/widget.css": "888516ac8d5cde8dc940d8d3b573cf8ca42f52efd93ffd14b2df8c182548ae72",
+    "extensions/support-widget/public/widget.js": "49e6854d6249b1343a6bfd26268e8047f92ee72be6cf753e956a0f37b8e5c0e7",
+    "extensions/support-widget/ui/config-recovery.css": "204e793aada3e89f8748d9f95ef1a8c98f5c8a2fea2285c4973dc4408b102af4",
+    "extensions/support-widget/ui/config.css": "520fcf5223df331dd708ac8d1f4c3f56a195d1bfa2d1e89ef7fb6102edae8fd9",
+    "extensions/support-widget/ui/config.js": "ddb550ff0521e2050c04c4547f314807a473704c1a31aa0f032f38ed16d23a2c",
+    "extensions/support-widget/ui/index.html": "8497c25906ad23fccdc2e77575553f605bdec897f0ef5e8f1391e5dc6a726922",
+    "extensions/usdt-trc20/.gitignore": "b7b5a9a5bdb3a876455f7320f221592c77a378fac89c0283dc6ebe19b124bf43",
+    "extensions/usdt-trc20/README.md": "f7e68d613c9cf30e9b798b88d34b4126eca82a3d9392f94ec639c5d4ccb7b197",
+    "extensions/usdt-trc20/build.py": "5d427e821831332ce7bfa385f15bcfcc23675351a29efe6cc415f5b9c2383275",
+    "extensions/usdt-trc20/manifest.template.json": "81a0e2362ec7a47f548015e1efb004a8f4739e9cf4221b5445700110a2923609",
+    "extensions/usdt-trc20/ui/config.js": "42dfd750f6a4cf8aefa0d7310ab2ead75d45fce6df50e6659e25db224230bef3",
+    "extensions/usdt-trc20/ui/index.html": "482d95bc3fc673fd0e65ae600df58dce93f1e0e677caca0944891562c8fae0ac",
+    "extensions/usdt-trc20/ui/style.css": "bf731b34a4c43f6869ed4503d5016f6c48bf927831be76673a85e3315046d0c4"
+  }
+}

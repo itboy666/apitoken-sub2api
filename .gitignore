@@ -15,6 +15,7 @@ backend/bin/
 backend/server
 backend/sub2api
 backend/main
+extensions/*/bin/
 
 # Go 测试二进制
 *.test
@@ -123,6 +124,10 @@ tests
 CLAUDE.md
 .claude
 scripts
+!/scripts/
+/scripts/*
+!/scripts/apitoken/
+**/__pycache__/
 !backend/scripts/
 !backend/scripts/resolve-version.sh
 .code-review-state
@@ -135,6 +140,7 @@ deploy/docker-compose.override.yml
 vite.config.js
 user-traffic-pending/
 docs/*
+!docs/apitoken-updates.md
 !docs/account-platform-edit.md
 !docs/openai-totp-factor-recovery.md
 !docs/ai-ops-codex.md

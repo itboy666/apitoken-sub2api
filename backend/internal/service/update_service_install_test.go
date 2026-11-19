@@ -5,6 +5,7 @@ package service
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"os"
@@ -23,6 +24,8 @@ type updateInstallClient struct {
 	latestErr    error
 	latestCalls  int
 	recentCalls  int
+	archive      []byte
+	checksums    []byte
 }
 
 func (c *updateInstallClient) FetchLatestRelease(ctx context.Context, repo string) (*GitHubRelease, error) {
@@ -42,7 +45,14 @@ func (c *updateInstallClient) DownloadFile(_ context.Context, _, dest string, _ 
 	if c.failDownload {
 		return errors.New("download unavailable")
 	}
+	if c.archive != nil {
+		return os.WriteFile(dest, c.archive, 0600)
+	}
 	return os.WriteFile(dest, []byte("downloaded release"), 0600)
+}
+
+func (c *updateInstallClient) FetchChecksumFile(context.Context, string) ([]byte, error) {
+	return c.checksums, nil
 }
 
 func TestUpdateServicePendingRestartPrecedesReleaseLookup(t *testing.T) {
@@ -82,7 +92,7 @@ func TestUpdateServiceRequiresRestartBeforeNextMutation(t *testing.T) {
 		return
 	}
 
-	for _, scenario := range []string{"update-update", "update-rollback", "rollback-update", "rollback-rollback", "failed-update-retry"} {
+	for _, scenario := range []string{"update-update", "update-rollback", "rollback-update", "rollback-rollback", "failed-update-retry", "combined-update", "combined-invalid-archive"} {
 		t.Run(scenario, func(t *testing.T) {
 			// Never rename the parent test runner: only the disposable child copy.
 			executable, err := os.Executable()
@@ -119,7 +129,28 @@ func runUpdateInstallScenario(t *testing.T, scenario string) {
 			BrowserDownloadURL: "https://github.com/example/releases/" + svc.getArchiveName(),
 		}},
 	}
+	if scenario == "combined-update" || scenario == "combined-invalid-archive" {
+		svc = combinedTestService(client, &updateServiceCacheStub{})
+		version := "2.23.0-apitoken.9"
+		name := "sub2api_" + version + "_" + svc.getArchiveName() + ".tar.gz"
+		baseURL := "https://github.com/" + combinedTestRepo + "/releases/download/v" + version + "/"
+		client.release = combinedRelease(version)
+		client.release.Assets = []GitHubAsset{{Name: name, BrowserDownloadURL: baseURL + name}, {Name: "checksums.txt", BrowserDownloadURL: baseURL + "checksums.txt"}}
+		client.archive, _ = combinedArchiveBytes(t, version, nil)
+		if scenario == "combined-invalid-archive" {
+			client.archive, _ = combinedArchiveBytes(t, version, func(manifest map[string]string) { manifest["customization_abi"] = "official" })
+		}
+		digest := sha256.Sum256(client.archive)
+		client.checksums = []byte(hex.EncodeToString(digest[:]) + "  " + name + "\n")
+	}
 	update := func() error { return svc.PerformUpdate(context.Background()) }
+	if scenario == "combined-invalid-archive" {
+		before := updateInstallFileHashes(t, executable)
+		require.ErrorContains(t, update(), "provenance")
+		require.Equal(t, before, updateInstallFileHashes(t, executable))
+		require.False(t, svc.restartRequired)
+		return
+	}
 	if scenario == "failed-update-retry" {
 		client.failDownload = true
 		require.ErrorContains(t, update(), "download unavailable")

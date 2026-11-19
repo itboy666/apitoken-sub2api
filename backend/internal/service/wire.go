@@ -33,8 +33,11 @@ func ProvideGrokOAuthService(proxyRepo ProxyRepository, oauthClient GrokOAuthCli
 
 // BuildInfo contains build information
 type BuildInfo struct {
-	Version   string
-	BuildType string
+	UpdateChannel    string
+	UpdateRepository string
+	UpstreamVersion  string
+	Version          string
+	BuildType        string
 }
 
 // ProvidePricingService creates and initializes PricingService
@@ -49,7 +52,15 @@ func ProvidePricingService(cfg *config.Config, remoteClient PricingRemoteClient)
 
 // ProvideUpdateService creates UpdateService with BuildInfo
 func ProvideUpdateService(cache UpdateCache, githubClient GitHubReleaseClient, buildInfo BuildInfo) *UpdateService {
-	return NewUpdateService(cache, githubClient, buildInfo.Version, buildInfo.BuildType)
+	repository := buildInfo.UpdateRepository
+	if configured := os.Getenv("APITOKEN_UPDATE_REPOSITORY"); configured != "" && buildInfo.UpdateChannel == "apitoken" {
+		repository = configured
+	}
+	return NewUpdateService(cache, githubClient, buildInfo.Version, buildInfo.BuildType, UpdateSource{
+		Channel:         buildInfo.UpdateChannel,
+		Repository:      repository,
+		UpstreamVersion: buildInfo.UpstreamVersion,
+	})
 }
 
 // ProvideEmailQueueService creates EmailQueueService with default worker count

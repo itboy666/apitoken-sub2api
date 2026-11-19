@@ -34,10 +34,13 @@ var embeddedVersion string
 
 // Build-time variables (can be set by ldflags)
 var (
-	Version   = ""
-	Commit    = "unknown"
-	Date      = "unknown"
-	BuildType = "source" // "source" for manual builds, "release" for CI builds (set by ldflags)
+	Version          = ""
+	Commit           = "unknown"
+	Date             = "unknown"
+	UpdateChannel    = "apitoken"
+	UpdateRepository = ""
+	UpstreamVersion  = "2.23.0"
+	BuildType        = "source" // "source" for manual builds, "release" for CI builds (set by ldflags)
 )
 
 func init() {
@@ -171,8 +174,11 @@ func runMainServer() {
 	}
 
 	buildInfo := handler.BuildInfo{
-		Version:   Version,
-		BuildType: BuildType,
+		Version:          Version,
+		BuildType:        BuildType,
+		UpdateChannel:    UpdateChannel,
+		UpdateRepository: UpdateRepository,
+		UpstreamVersion:  UpstreamVersion,
 	}
 
 	app, err := initializeApplication(buildInfo)

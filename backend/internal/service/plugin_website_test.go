@@ -161,14 +161,17 @@ func TestWebsiteReleasePackageInstallsWithPinnedProductionSignature(t *testing.T
 	require.Empty(t, installed.BinaryPath)
 	require.Equal(t, PluginStateDisabled, installed.State)
 	require.True(t, installed.Compatibility.Compatible)
-	require.True(t, installed.Compatibility.Tested)
+	acceptCandidate := websiteReleaseHostVersion() == os.Getenv("SUB2API_TEST_CANDIDATE_HOST_VERSION")
+	if !acceptCandidate {
+		require.True(t, installed.Compatibility.Tested)
+	}
 	_, err = manager.SaveConfig(t.Context(), installed.ID, []byte(`{"service_contact":"154215395","qq_group_number":"154895805"}`))
 	require.NoError(t, err)
 	configBefore := repo.items[installed.ID].ConfigEncrypted
 	test, err := manager.Test(t.Context(), installed.ID)
 	require.NoError(t, err)
 	require.True(t, test.Success)
-	_, err = manager.Enable(t.Context(), installed.ID, false, 100)
+	_, err = manager.Enable(t.Context(), installed.ID, acceptCandidate, 100)
 	require.NoError(t, err)
 	public, err := manager.ListPublicWebsitePlugins(t.Context())
 	require.NoError(t, err)

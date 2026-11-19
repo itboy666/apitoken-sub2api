@@ -19,6 +19,15 @@ export default {
 
   // Version Badge
   version: {
+    upstreamBase: 'Upstream base',
+    combinedSource: 'Combined release source',
+    sourceNotConnected: 'Not connected',
+    combinedPending: 'Connect a combined release source',
+    combinedUpdateHint: 'Upstream changes are merged with site customizations and verified before release here.',
+    combinedSetupHint: 'Connect your release repository to check for and install combined builds here.',
+    combinedSourceBuildHint: 'Merge the official stable release into the custom branch, then test, build and publish it.',
+    checkUnavailable: 'The latest version could not be verified. Please refresh and try again.',
+    notChecked: 'Latest version not verified',
     currentVersion: 'Current Version',
     latestVersion: 'Latest Version',
     upToDate: "You're running the latest version.",
@@ -30,7 +39,7 @@ export default {
     viewChangelog: 'View Changelog',
     refresh: 'Refresh',
     sourceMode: 'Source Build',
-    sourceModeHint: 'Source build, use git pull to update',
+    sourceModeHint: 'Merge changes, rebuild and deploy this source build',
     updateNow: 'Update Now',
     updating: 'Updating...',
     updateComplete: 'Update Complete',
