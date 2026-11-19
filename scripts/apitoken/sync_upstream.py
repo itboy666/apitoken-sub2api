@@ -53,6 +53,23 @@ def assert_protected_migrations(metadata):
             raise ValueError(f"Applied migration must not be rewritten: {name}")
 
 
+def merge_upstream(tracking_ref, original):
+    merged = git("merge", "--no-ff", "--no-commit", tracking_ref, check=False)
+    if merged.returncode:
+        conflicts = git("diff", "--name-only", "--diff-filter=U", "-z").stdout.rstrip("\0").split("\0")
+        conflicts = [name for name in conflicts if name]
+        # The distribution owns its version and workflow definitions. All other
+        # conflicts require review, as do fatal errors with no merge to resolve.
+        unexpected = [name for name in conflicts if name != "backend/cmd/server/VERSION" and not name.startswith(".github/workflows/")]
+        if merged.returncode != 1 or not conflicts or unexpected:
+            detail = ", ".join(unexpected or conflicts) or merged.stderr.strip()
+            raise ValueError("Upstream merge stopped; review conflicts before publishing: " + detail)
+    # Restore additions, changes and deletions, even when Git merged them cleanly.
+    # GITHUB_TOKEN can publish releases but cannot write workflow definitions.
+    # This also preserves the guards that disable upstream-only release jobs.
+    git("restore", "--source", original, "--staged", "--worktree", "--", ".github/workflows")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tag", default="", help="Official stable tag; omit to resolve latest")
@@ -74,13 +91,7 @@ def main():
         raise ValueError("Upstream tag is older than, or unrelated to, the recorded official base")
     current = (ROOT / "backend/cmd/server/VERSION").read_text().strip()
     version = choose_version(tag, current, git("tag", "--list", "v*-apitoken.*").stdout.splitlines())
-    merged = git("merge", "--no-ff", "--no-commit", tracking_ref, check=False)
-    if merged.returncode:
-        conflicts = git("diff", "--name-only", "--diff-filter=U").stdout.splitlines()
-        # VERSION intentionally differs in the distribution. Only this known
-        # metadata conflict can be resolved automatically; source conflicts stop.
-        if not conflicts or set(conflicts) != {"backend/cmd/server/VERSION"}:
-            raise ValueError("Upstream merge stopped; review conflicts before publishing: " + ", ".join(conflicts))
+    merge_upstream(tracking_ref, original)
     assert_protected_migrations(metadata)
     (ROOT / "backend/cmd/server/VERSION").write_text(version + "\n")
     metadata.update(tag=tag, commit=upstream_commit)
