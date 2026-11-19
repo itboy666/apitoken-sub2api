@@ -173,6 +173,11 @@ func TestWebsiteReleasePackageInstallsWithPinnedProductionSignature(t *testing.T
 	test, err := manager.Test(t.Context(), installed.ID)
 	require.NoError(t, err)
 	require.True(t, test.Success)
+	if !installed.Compatibility.Tested {
+		_, err = manager.Enable(t.Context(), installed.ID, false, 100)
+		require.ErrorContains(t, err, "需要管理员确认", "qualifying a candidate must retain the untested-host gate")
+		require.Equal(t, PluginStateDisabled, repo.items[installed.ID].State)
+	}
 	_, err = manager.Enable(t.Context(), installed.ID, acceptCandidate, 100)
 	require.NoError(t, err)
 	public, err := manager.ListPublicWebsitePlugins(t.Context())
@@ -200,7 +205,7 @@ func TestWebsiteReleasePackageInstallsWithPinnedProductionSignature(t *testing.T
 	require.Empty(t, public)
 	_, _, err = manager.ReadPublicWebsiteAsset(t.Context(), installed.ID, installed.BinarySHA256, installed.Manifest.PublicUI.Entrypoint)
 	require.ErrorIs(t, err, os.ErrNotExist)
-	_, err = manager.Enable(t.Context(), installed.ID, false, 100)
+	_, err = manager.Enable(t.Context(), installed.ID, acceptCandidate, 100)
 	require.NoError(t, err)
 	require.Equal(t, configBefore, repo.items[installed.ID].ConfigEncrypted)
 	_, err = manager.Disable(t.Context(), installed.ID)
