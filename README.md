@@ -1,3 +1,15 @@
+## APIToken 合并版
+
+本仓库基于 [ranxi2001/sub2api](https://github.com/ranxi2001/sub2api) 的正式发布版，保留 APIToken 定制界面、分组删除后的账号导入修复、客服浮窗插件和 USDT-TRC20 支付插件。
+
+[合并版下载](https://github.com/itboy666/apitoken-sub2api/releases/latest) · [更新与回退说明](docs/apitoken-updates.md) · [合并官方新版](https://github.com/itboy666/apitoken-sub2api/actions/workflows/apitoken-release.yml)
+
+后续更新：在 **Actions → APIToken combined release → Run workflow** 手动启动合并；官方标签留空时使用最新正式版。默认只测试和构建，勾选 `publish` 后才会发布。发布成功后，网站后台版本菜单可一键更新。出现代码冲突或验证失败时流程会停止，需要处理后重新运行。
+
+首次接入、插件兼容版本、数据备份和回退边界请先阅读更新说明。已使用本站定制功能的实例应安装本仓库的合并版发布包。以下保留上游项目介绍与文档，文中的上游安装命令和版本下载链接面向上游原版。
+
+---
+
 <div align="center">
 
 <img src="assets/logo-icon.png" alt="Sub2API Logo" width="128" />
