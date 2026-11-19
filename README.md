@@ -35,24 +35,19 @@
 
 ## 社区交流群
 
-欢迎正在部署、使用或维护 Sub2API 的朋友加入 QQ 群「中转技术交流」（群号 **1004036018**），交流部署实践、协议兼容、出口代理和功能改进。也欢迎参与问题复现、测试、文档补充和 Pull Request，一起维护这个独立分支。
+欢迎正在部署、使用或维护 APIToken / Sub2API 的朋友加入 QQ 群「主机测评/AIToken中转站交流群」（群号 **154895805**），交流部署实践、协议兼容、出口代理和功能改进。也欢迎参与问题复现、测试、文档补充和 Pull Request，一起维护这个独立分支。
 
-<table>
-<tr>
-<td align="center" width="50%">
-  <img src="assets/community/qq-relay-tech-group.png" alt="QQ 群：中转技术交流，群号 1004036018" width="71%" />
-  <br />
-  加入 QQ 群「中转技术交流」
-</td>
-<td align="center" width="50%">
-  <img src="assets/community/coffee-reward.png" alt="支付宝和微信赞赏码：如果帮到大家可以打赏咖啡" width="100%" />
-  <br />
-  如果帮到大家可以打赏咖啡！
-</td>
-</tr>
-</table>
+[点击链接加入群聊【主机测评/AIToken中转站交流群】](https://qm.qq.com/q/NpSwEowk0M)
 
-二维码长期有效。需要长期留档、报告问题或讨论具体改动时，请使用 [Issues](https://github.com/ranxi2001/sub2api/issues)。
+也可以扫描下方二维码加入群聊：
+
+<p align="center">
+  <a href="https://qm.qq.com/q/NpSwEowk0M">
+    <img src="assets/community/apitoken-qq-group.png" alt="QQ 群：主机测评/AIToken中转站交流群，群号 154895805" width="360" />
+  </a>
+</p>
+
+需要长期留档、报告问题或讨论具体改动时，请使用 [Issues](https://github.com/itboy666/apitoken-sub2api/issues)。
 
 ## 快速开始
 
