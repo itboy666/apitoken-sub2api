@@ -21,7 +21,7 @@ type server struct {
 }
 
 func (s *server) GetInfo(context.Context, *api.GetInfoRequest) (*api.GetInfoResponse, error) {
-	return &api.GetInfoResponse{PluginId: pluginID, PluginVersion: "1.1.0", ProtocolVersion: api.ProtocolVersion, TransportApiVersion: api.TransportAPIVersion, Capabilities: []string{"payment.usdt_trc20.v1"}}, nil
+	return &api.GetInfoResponse{PluginId: pluginID, PluginVersion: "1.2.0", ProtocolVersion: api.ProtocolVersion, TransportApiVersion: api.TransportAPIVersion, Capabilities: []string{"payment.usdt_trc20.v1"}}, nil
 }
 func (s *server) Health(context.Context, *api.HealthRequest) (*api.HealthResponse, error) {
 	return &api.HealthResponse{Healthy: true, Message: "USDT-TRC20 verifier ready"}, nil

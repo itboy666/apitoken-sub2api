@@ -182,7 +182,7 @@ func New(cfg Config) (*Client, error) {
 // payment and does not claim historical transactions for any order.
 func (c *Client) Test(ctx context.Context) error {
 	now := time.Now().UTC()
-	_, err := c.list(ctx, now.Add(-time.Hour), now, 0)
+	_, err := c.list(ctx, c.config.WalletAddress, now.Add(-time.Hour), now, 0)
 	return err
 }
 
@@ -204,6 +204,9 @@ func (c *Client) request(ctx context.Context, path string, query url.Values) (ma
 		return nil, errors.New("TronScan is temporarily unavailable")
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return nil, fmt.Errorf("TronScan 鉴权失败（HTTP %d）：请检查已保存的 API Key、接口权限及 IP 白名单；修改后先保存，再测试连接", resp.StatusCode)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("TronScan request failed (HTTP %d)", resp.StatusCode)
 	}
@@ -230,12 +233,12 @@ func (c *Client) FindPayment(ctx context.Context, invoice Invoice) (*Proof, erro
 	if err := invoice.Validate(); err != nil {
 		return nil, err
 	}
-	if invoice.Address != c.config.WalletAddress {
-		return nil, errors.New("invoice recipient does not match plugin configuration")
-	}
+	// The authenticated host supplies the immutable invoice recipient. A wallet
+	// rotation affects new orders only; previously issued invoices must still be
+	// verified against their original recipient, amount and time window.
 	seen := make(map[string]bool)
 	for start := 0; start < maxScanRecords; start += pageSize {
-		rows, err := c.list(ctx, invoice.CreatedAt, invoice.ExpiresAt, start)
+		rows, err := c.list(ctx, invoice.Address, invoice.CreatedAt, invoice.ExpiresAt, start)
 		if err != nil {
 			return nil, err
 		}
@@ -264,9 +267,9 @@ func (c *Client) FindPayment(ctx context.Context, invoice Invoice) (*Proof, erro
 	return nil, errors.New("TronScan transfer window exceeds the safe scan limit")
 }
 
-func (c *Client) list(ctx context.Context, from, to time.Time, offset int) ([]map[string]json.RawMessage, error) {
+func (c *Client) list(ctx context.Context, address string, from, to time.Time, offset int) ([]map[string]json.RawMessage, error) {
 	result, err := c.request(ctx, listPath, url.Values{
-		"trc20Id": {ContractAddress}, "address": {c.config.WalletAddress}, "direction": {"2"},
+		"trc20Id": {ContractAddress}, "address": {address}, "direction": {"2"},
 		"db_version": {"0"}, "reverse": {"false"}, "limit": {strconv.Itoa(pageSize)}, "start": {strconv.Itoa(offset)},
 		"start_timestamp": {strconv.FormatInt(from.UnixMilli(), 10)}, "end_timestamp": {strconv.FormatInt(to.UnixMilli(), 10)},
 	})

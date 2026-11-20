@@ -17,6 +17,31 @@ afterEach(() => { wrapper?.unmount(); wrapper = undefined; vi.useRealTimers() })
 function render() { wrapper = mount(CryptoPaymentView, { global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } } }); return wrapper }
 
 describe('CryptoPaymentView', () => {
+  it('blocks old wallet instructions after rotation while retaining verification and unpaid cancellation', async () => {
+    getCheckout.mockResolvedValue({ data: { ...checkout, wallet_changed: true } })
+    const page = render(); await flushPromises()
+    expect(page.get('[data-testid="payment-wallet-changed"]').text()).toBe('payment.cryptoCheckout.walletChangedHint')
+    expect(page.find('[data-testid="payment-qr"]').exists()).toBe(false)
+    expect(page.find('[data-testid="receiving-address"]').exists()).toBe(false)
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(verify).toHaveBeenCalledWith('owned-order')
+    expect(cancel).not.toHaveBeenCalled()
+    await page.findAll('button').find(button => button.text() === 'payment.cryptoCheckout.cancelOrder')!.trigger('click')
+    expect(page.text()).toContain('payment.cryptoCheckout.cancelConfirm')
+    expect(cancel).not.toHaveBeenCalled()
+  })
+  it('hides a previously displayed QR when the wallet changes during polling', async () => {
+    const page = render(); await flushPromises()
+    expect(page.find('[data-testid="payment-qr"]').exists()).toBe(true)
+    getCheckout.mockResolvedValue({ data: { ...checkout, wallet_changed: true } })
+    await vi.advanceTimersByTimeAsync(5000); await flushPromises()
+    expect(page.find('[data-testid="payment-qr"]').exists()).toBe(false)
+    expect(page.text()).not.toContain(checkout.address)
+    getCheckout.mockResolvedValue({ data: { ...checkout, status: 'COMPLETED', wallet_changed: false } })
+    await vi.advanceTimersByTimeAsync(5000); await flushPromises()
+    expect(page.text()).toContain('payment.cryptoCheckout.paid')
+    expect(page.find('[data-testid="payment-wallet-changed"]').exists()).toBe(false)
+  })
   it('copies the receiving address on the HTTP IP deployment', async () => {
     const execCommand = vi.fn(() => true)
     Object.defineProperty(document, 'execCommand', { configurable: true, value: execCommand })

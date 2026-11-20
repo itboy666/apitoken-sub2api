@@ -195,7 +195,7 @@ func TestUSDTNativeRuntime(t *testing.T) {
 	b, e := os.ReadFile(path)
 	require.NoError(t, e)
 	hash := sha256.Sum256(b)
-	inst := &PluginInstallation{PluginKey: "local.apitoken.usdt-trc20", Version: "1.1.0", BinaryPath: path, BinarySHA256: hex.EncodeToString(hash[:])}
+	inst := &PluginInstallation{PluginKey: "local.apitoken.usdt-trc20", Version: "1.2.0", BinaryPath: path, BinarySHA256: hex.EncodeToString(hash[:])}
 	socket, e := os.MkdirTemp("/tmp", "usdt-sock-")
 	require.NoError(t, e)
 	defer os.RemoveAll(socket)
@@ -213,7 +213,7 @@ func TestUSDTNativeRuntime(t *testing.T) {
 }
 
 func TestUSDTSignedPackageLifecycle(t *testing.T) {
-	versions := []string{"2.23.0-apitoken.9"}
+	versions := []string{"2.23.0-apitoken.11"}
 	if candidate := os.Getenv("SUB2API_TEST_CANDIDATE_HOST_VERSION"); candidate != "" {
 		versions = append(versions, candidate)
 	}
@@ -239,7 +239,7 @@ func TestUSDTPackageRequiresSignatureEvenWithDevelopmentOverride(t *testing.T) {
 		}
 	}
 	require.NoError(t, writer.Close())
-	installer := NewPluginPackageInstaller(testPluginConfig(t.TempDir(), true), PluginHostInfo{Version: "2.23.0-apitoken.9"})
+	installer := NewPluginPackageInstaller(testPluginConfig(t.TempDir(), true), PluginHostInfo{Version: "2.23.0-apitoken.11"})
 	_, err = installer.Install(t.Context(), bytes.NewReader(stripped.Bytes()), nil)
 	require.ErrorContains(t, err, "支付插件必须使用可信发布者签名")
 }
@@ -264,6 +264,7 @@ func testUSDTSignedPackageLifecycle(t *testing.T, version string) {
 	require.True(t, EvaluatePluginCompatibility(p.Manifest, PluginHostInfo{Version: "2.24.0-apitoken.1"}).Compatible)
 	require.False(t, EvaluatePluginCompatibility(p.Manifest, PluginHostInfo{Version: "3.0.0-apitoken.1"}).Compatible)
 	require.False(t, EvaluatePluginCompatibility(p.Manifest, PluginHostInfo{Version: "2.23.0-apitoken.8"}).Compatible)
+	require.False(t, EvaluatePluginCompatibility(p.Manifest, PluginHostInfo{Version: "2.23.0-apitoken.10"}).Compatible)
 	require.Equal(t, PluginSignatureTrusted, p.SignatureStatus)
 	cfg := json.RawMessage(`{"wallet_address":"TWwECvk3qmaXWvQd6FrGU5rK6AJ78dyFB9","tronscan_api_key":"fixture-api-key-not-secret"}`)
 	masked, e := m.SaveConfig(t.Context(), p.ID, cfg)
@@ -277,6 +278,7 @@ func testUSDTSignedPackageLifecycle(t *testing.T, version string) {
 	require.NoError(t, m.reconcileOnce(t.Context()))
 	_, _, e = m.activePaymentPlugin(t.Context())
 	require.NoError(t, e)
+	t.Run("wallet rotation", func(t *testing.T) { testUSDTWalletRotation(t, m, p) })
 	m.Stop()
 	restarted := NewPluginManager(repo, m.encryptor, m.cfg, m.hostInfo, nil)
 	defer restarted.Stop()
@@ -290,6 +292,74 @@ func testUSDTSignedPackageLifecycle(t *testing.T, version string) {
 	require.Error(t, e)
 	require.NoError(t, restarted.Delete(t.Context(), p.ID))
 	require.Empty(t, trustedPluginPublisherKey(nil, "apitoken-usdt-trc20-v1", "malicious.other-plugin"))
+}
+
+func testUSDTWalletRotation(t *testing.T, manager *PluginManager, installation *PluginInstallation) {
+	dsn := os.Getenv("USDT_TEST_POSTGRES_DSN")
+	if dsn == "" {
+		t.Skip("disposable PostgreSQL required")
+	}
+	ctx := t.Context()
+	db, err := sql.Open("pgx", dsn)
+	require.NoError(t, err)
+	defer db.Close()
+	client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, db)))
+	require.NoError(t, client.Schema.Create(ctx))
+	for _, name := range []string{"388_usdt_payment_plugin.sql", "389_usdt_active_amount_reservations.sql", "390_usdt_configurable_pricing.sql"} {
+		migration, err := migrations.FS.ReadFile(name)
+		require.NoError(t, err)
+		_, err = db.ExecContext(ctx, string(migration))
+		require.NoError(t, err)
+	}
+	u, err := client.User.Create().SetEmail(fmt.Sprintf("rotation-%d@example.test", time.Now().UnixNano())).SetPasswordHash("fixture").SetUsername("rotation-test").Save(ctx)
+	require.NoError(t, err)
+	configService := &PaymentConfigService{entClient: client, pluginManager: manager}
+	manager.paymentConfigGuard = configService.guardUSDTWalletChange
+	defer func() { manager.paymentConfigGuard = nil }()
+	svc := &PaymentService{entClient: client, configService: configService}
+	create := func() (*dbent.PaymentOrder, *usdtInvoice) {
+		result, err := svc.createUSDTOrder(ctx, CreateOrderRequest{UserID: u.ID, PaymentType: PaymentTypeUSDTPlugin, OrderType: payment.OrderTypeBalance},
+			&User{ID: u.ID, Email: u.Email, Username: u.Username}, nil, &PaymentConfig{OrderTimeoutMin: 30, MaxPendingOrders: 10}, 65, 65, 0)
+		require.NoError(t, err)
+		o, err := client.PaymentOrder.Get(ctx, result.OrderID)
+		require.NoError(t, err)
+		i, err := svc.usdtInvoice(ctx, o.ID)
+		require.NoError(t, err)
+		return o, i
+	}
+	oldOrder, oldInvoice := create()
+	before, err := manager.GetConfig(ctx, installation.ID)
+	require.NoError(t, err)
+	var after map[string]any
+	require.NoError(t, json.Unmarshal(before, &after))
+	after["wallet_address"] = "TNUrv3PEVuuQkJRaSb2tGmFWJYg9PQ5Vx5"
+	raw, err := json.Marshal(after)
+	require.NoError(t, err)
+	legacy := *installation
+	legacy.Version = "1.1.0"
+	require.ErrorContains(t, configService.guardUSDTWalletChange(ctx, &legacy, before, raw), "地址未保存")
+	_, err = manager.SaveConfig(ctx, installation.ID, raw)
+	require.NoError(t, err)
+	oldCheckout, err := svc.GetCryptoCheckout(ctx, oldOrder.OutTradeNo, u.ID)
+	require.NoError(t, err)
+	require.True(t, oldCheckout.WalletChanged)
+	require.Equal(t, oldInvoice.Wallet, oldCheckout.Address)
+	require.Equal(t, "healthy", oldCheckout.NetworkStatus)
+	newOrder, newInvoice := create()
+	require.Equal(t, after["wallet_address"], newInvoice.Wallet)
+	newCheckout, err := svc.GetCryptoCheckout(ctx, newOrder.OutTradeNo, u.ID)
+	require.NoError(t, err)
+	require.False(t, newCheckout.WalletChanged)
+	preserved, err := svc.usdtInvoice(ctx, oldOrder.ID)
+	require.NoError(t, err)
+	require.Equal(t, oldInvoice, preserved)
+	_, err = svc.GetCryptoCheckout(ctx, oldOrder.OutTradeNo, u.ID+1)
+	require.Error(t, err)
+	_, err = client.PaymentOrder.UpdateOneID(oldOrder.ID).SetStatus(OrderStatusCompleted).Save(ctx)
+	require.NoError(t, err)
+	settled, err := svc.GetCryptoCheckout(ctx, oldOrder.OutTradeNo, u.ID)
+	require.NoError(t, err)
+	require.False(t, settled.WalletChanged)
 }
 
 type usdtMemoryRepo struct{ *websiteMemoryRepo }

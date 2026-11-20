@@ -317,6 +317,8 @@ export default {
       closeHint: 'Closing the window keeps your order. Reopen it to continue.',
       reopen: 'Continue payment',
       networkDelayed: 'Payment confirmation is delayed',
+      walletChanged: 'Receiving address updated. Create a new order.',
+      walletChangedHint: 'The merchant has changed the receiving address. This order retains its original address and amount. If you have not paid, cancel this order and return to the purchase page to create a new one. If you have already paid, keep this order open for verification; do not cancel it or pay again.',
       networkDelayHint: 'The payment network is unavailable. We are retrying and checking earlier transfers. Please wait before sending funds. If you have already paid, do not pay again; the order will update after confirmation.',
       title: 'Crypto payment', back: 'Back to billing', address: 'Receiving address', addressQR: 'Receiving address QR code',
       instruction: 'Send the exact amount below using {network}. Transfers on another network cannot pay this order.',

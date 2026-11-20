@@ -2,14 +2,14 @@
   "schema_version": 1,
   "id": "local.apitoken.usdt-trc20",
   "name": "APIToken USDT · TRC20 支付",
-  "version": "1.1.0",
-  "description": "支持独立手续费与自定义 USDT/CNY 汇率。经 TronScan 核验官方 USDT、精确金额和 20 次确认；订单锁定汇率并持久防重。",
+  "version": "1.2.0",
+  "description": "支持更换收款地址并继续核验旧订单、独立手续费和自定义 USDT/CNY 汇率。仅核验官方 USDT、精确金额和 20 次确认，持久防重。",
   "author": "APIToken",
   "requires": {
-    "sub2api": ">=2.23.0-apitoken.9 <3.0.0-0",
-    "recommended_sub2api_version": "2.23.0-apitoken.9",
+    "sub2api": ">=2.23.0-apitoken.11 <3.0.0-0",
+    "recommended_sub2api_version": "2.23.0-apitoken.11",
     "tested_sub2api_versions": [
-      "2.23.0-apitoken.9"
+      "2.23.0-apitoken.11"
     ],
     "plugin_protocol": 1,
     "transport_api": 1,

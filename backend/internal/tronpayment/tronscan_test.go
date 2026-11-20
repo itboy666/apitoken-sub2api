@@ -1,6 +1,7 @@
 package tronpayment
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"github.com/stretchr/testify/require"
@@ -107,6 +108,48 @@ func TestVerifierRejectsMalformedAndRedirects(t *testing.T) {
 	e = c.Test(context.Background())
 	require.Error(t, e)
 	require.NotContains(t, e.Error(), "secret-api-body")
+}
+
+func TestWalletRotationVerifiesOriginalInvoice(t *testing.T) {
+	l, d := fixture(t, "list"), fixture(t, "detail")
+	ts := int64(d["timestamp"].(float64))
+	invoice := Invoice{OrderID: "issued-before-rotation", Address: row(l)["to"].(string), AmountMicro: "128000000", CreatedAt: time.UnixMilli(ts - 1000), ExpiresAt: time.UnixMilli(ts + 1000)}
+	c, err := New(Config{RateCNY: 6.5, WalletAddress: "TNUrv3PEVuuQkJRaSb2tGmFWJYg9PQ5Vx5", TronscanAPIKey: "fixture-api-key-not-secret"})
+	require.NoError(t, err)
+	c.http.Transport = roundTripper(func(r *http.Request) (*http.Response, error) {
+		data := d
+		if r.URL.Path == listPath {
+			require.Equal(t, invoice.Address, r.URL.Query().Get("address"))
+			require.Equal(t, ContractAddress, r.URL.Query().Get("trc20Id"))
+			data = l
+		}
+		b, err := json.Marshal(data)
+		require.NoError(t, err)
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader(b))}, nil
+	})
+	proof, err := c.FindPayment(t.Context(), invoice)
+	require.NoError(t, err)
+	require.NotNil(t, proof)
+	require.Equal(t, invoice.Address, proof.ToAddress)
+	// Moving the same transfer to a new invoice recipient cannot claim it.
+	invoice.Address = c.config.WalletAddress
+	proof, err = c.FindPayment(t.Context(), invoice)
+	require.NoError(t, err)
+	require.Nil(t, proof)
+}
+
+func TestTronScanAuthenticationErrorIsActionableAndRedacted(t *testing.T) {
+	for _, code := range []int{http.StatusUnauthorized, http.StatusForbidden} {
+		c, err := New(Config{RateCNY: 6.5, WalletAddress: "TWwECvk3qmaXWvQd6FrGU5rK6AJ78dyFB9", TronscanAPIKey: "fixture-api-key-not-secret"})
+		require.NoError(t, err)
+		c.http.Transport = roundTripper(func(*http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: code, Body: io.NopCloser(strings.NewReader("untrusted body with secret"))}, nil
+		})
+		err = c.Test(t.Context())
+		require.ErrorContains(t, err, "API Key")
+		require.ErrorContains(t, err, "IP 白名单")
+		require.NotContains(t, err.Error(), "secret")
+	}
 }
 
 func TestConfigIndependentPricingAndValidation(t *testing.T) {

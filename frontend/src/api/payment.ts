@@ -24,6 +24,7 @@ export interface PublicOrderVerifyResult {
 }
 
 export interface CryptoCheckout {
+  wallet_changed?: boolean
   exchange_rate?: string
   contract_address?: string
   network_status?: 'healthy' | 'delayed' | 'checking'

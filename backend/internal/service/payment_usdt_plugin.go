@@ -296,14 +296,17 @@ func (s *PaymentService) usdtCheckout(ctx context.Context, o *dbent.PaymentOrder
 	if i.CheckFailed {
 		network = "delayed"
 	}
-	if _, _, err = s.configService.pluginManager.activePaymentPlugin(ctx); err != nil {
+	active, cfg, activeErr := s.configService.pluginManager.activePaymentPlugin(ctx)
+	if activeErr != nil || active.ID != i.PluginID {
 		network = "delayed"
 	}
+	walletChanged := activeErr == nil && active.ID == i.PluginID && cfg.WalletAddress != i.Wallet &&
+		(o.Status == OrderStatusPending || o.Status == OrderStatusExpired)
 	rate, err := decimal.NewFromString(i.RateCNY)
 	if err != nil || !rate.IsPositive() {
 		return nil, errors.New("invalid stored USDT exchange rate")
 	}
-	return &CryptoCheckout{OrderID: o.ID, OutTradeNo: o.OutTradeNo, Status: o.Status, Network: "usdt.trc20", Crypto: "USDT", Address: i.Wallet, CryptoAmount: formatUSDTMicro(amount), FiatAmount: i.PayCNY, Currency: "CNY", ExpiresAt: i.ExpiresAt, TransactionHash: i.Hash.String, NetworkStatus: network, ExchangeRate: rate.String(), ContractAddress: tronpayment.ContractAddress}, nil
+	return &CryptoCheckout{OrderID: o.ID, OutTradeNo: o.OutTradeNo, Status: o.Status, Network: "usdt.trc20", Crypto: "USDT", Address: i.Wallet, CryptoAmount: formatUSDTMicro(amount), FiatAmount: i.PayCNY, Currency: "CNY", ExpiresAt: i.ExpiresAt, TransactionHash: i.Hash.String, NetworkStatus: network, WalletChanged: walletChanged, ExchangeRate: rate.String(), ContractAddress: tronpayment.ContractAddress}, nil
 }
 
 // Keep already-issued six-decimal invoices exact. New invoices use cents.

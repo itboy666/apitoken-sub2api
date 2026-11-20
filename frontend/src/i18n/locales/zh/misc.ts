@@ -341,6 +341,8 @@ export default {
       closeHint: '关闭窗口不会取消订单，可继续查看付款信息。',
       reopen: '继续支付',
       networkDelayed: '收款确认暂有延迟',
+      walletChanged: '收款地址已更新，请重新下单',
+      walletChangedHint: '商家已更新收款地址，本订单仍保留创建时的地址与金额。若尚未付款，请取消本订单并返回充值页重新下单；若已经付款，请保留本订单等待核验，不要取消或重复付款。',
       networkDelayHint: '当前收款网络异常，系统正在自动重试和核对历史转账。请暂勿转账；如果已经付款，请勿重复付款，确认到账后订单会自动更新。',
       title: '加密货币付款', back: '返回购买页面', address: '收款地址', addressQR: '收款地址二维码',
       instruction: '请使用 {network} 转入下方精确金额。其他网络的转账无法完成此订单。',

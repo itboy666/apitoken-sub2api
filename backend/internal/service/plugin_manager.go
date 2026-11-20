@@ -43,7 +43,7 @@ type pluginRoute struct {
 
 // PluginManager 管理插件安装、配置、进程生命周期和 OpenAI OAuth 能力绑定。
 type PluginManager struct {
-	paymentConfigGuard func(context.Context, json.RawMessage, json.RawMessage) error
+	paymentConfigGuard func(context.Context, *PluginInstallation, json.RawMessage, json.RawMessage) error
 	repo               PluginRepository
 	encryptor          SecretEncryptor
 	cfg                *config.Config
@@ -751,7 +751,7 @@ func (m *PluginManager) SaveConfig(ctx context.Context, id int64, raw json.RawMe
 	if installation.Manifest.IsPaymentPlugin() {
 		raw, err = mergePaymentPluginSecret(raw, previousConfig)
 		if err == nil && m.paymentConfigGuard != nil {
-			err = m.paymentConfigGuard(ctx, previousConfig, raw)
+			err = m.paymentConfigGuard(ctx, installation, previousConfig, raw)
 		}
 		if err != nil {
 			return nil, err

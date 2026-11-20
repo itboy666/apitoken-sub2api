@@ -58,3 +58,23 @@ test('server error messages remain text and cannot inject markup',async()=>{
  p.deliver(request,{ok:false,error:'<img src=x onerror=alert(1)>'});await saving;
  assert.equal(p.get('message').textContent,'<img src=x onerror=alert(1)>');
 });
+
+test('editing a wallet distinguishes unsaved text from the effective address',async()=>{
+ const p=page();await p.load();const original=p.get('saved-wallet').textContent;
+ p.get('wallet').value='TNUrv3PEVuuQkJRaSb2tGmFWJYg9PQ5Vx5';p.get('form').events.input();
+ await p.get('test').events.click();
+ assert.match(p.get('message').textContent,/未保存/);assert.equal(p.get('saved-wallet').textContent,original);
+ assert.equal(p.sent.filter(m=>m.type==='config.test').length,0);
+ const saving=p.get('save').events.click();const request=p.sent.at(-1);
+ p.deliver(request,{config:{...request.config,api_key_set:true}});await saving;
+ assert.equal(p.get('saved-wallet').textContent,'TNUrv3PEVuuQkJRaSb2tGmFWJYg9PQ5Vx5');
+ const testing=p.get('test').events.click();p.deliver(p.sent.at(-1),{result:{success:false,message:'TronScan 鉴权失败（HTTP 401）'}});await testing;
+ assert.match(p.get('message').textContent,/401/);assert.equal(p.get('message').focused,true);
+});
+
+test('a rejected wallet save retains the actual saved address',async()=>{
+ const p=page();await p.load();const original=p.get('saved-wallet').textContent;
+ p.get('wallet').value='TNUrv3PEVuuQkJRaSb2tGmFWJYg9PQ5Vx5';
+ const saving=p.get('save').events.click();p.deliver(p.sent.at(-1),{ok:false,error:'地址未保存'});await saving;
+ assert.equal(p.get('saved-wallet').textContent,original);assert.match(p.get('message').textContent,/未保存/);
+});

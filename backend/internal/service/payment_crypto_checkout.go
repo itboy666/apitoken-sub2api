@@ -28,6 +28,7 @@ type CryptoCheckout struct {
 	Confirming      bool      `json:"confirming"`
 	TransactionHash string    `json:"transaction_hash,omitempty"`
 	NetworkStatus   string    `json:"network_status"`
+	WalletChanged   bool      `json:"wallet_changed,omitempty"`
 }
 
 // Resolve the merchant order through authenticated ownership before touching

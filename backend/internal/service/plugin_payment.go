@@ -173,13 +173,18 @@ func (m *PluginManager) verifyPluginPayment(ctx context.Context, id int64, req *
 	return rt.api.VerifyPayment(ctx, req)
 }
 
-// A wallet change cannot strand a still-recoverable invoice.
-func (s *PaymentConfigService) guardUSDTWalletChange(ctx context.Context, previous, next json.RawMessage) error {
+// Older verifiers can only query their configured wallet. Keep their protection
+// until a signed verifier supporting immutable invoice recipients is installed.
+func (s *PaymentConfigService) guardUSDTWalletChange(ctx context.Context, installation *PluginInstallation, previous, next json.RawMessage) error {
 	var before, after map[string]any
 	if json.Unmarshal(previous, &before) != nil || json.Unmarshal(next, &after) != nil {
 		return errors.New("支付配置无效")
 	}
 	if before["wallet_address"] == nil || before["wallet_address"] == after["wallet_address"] {
+		return nil
+	}
+	if installation != nil && installation.PluginKey == "local.apitoken.usdt-trc20" &&
+		installation.SignatureStatus == PluginSignatureTrusted && matchesSemverRange(installation.Version, ">=1.2.0 <2.0.0-0") {
 		return nil
 	}
 	rows, err := s.entClient.QueryContext(ctx, `SELECT 1 FROM sub2api_usdt_invoices i JOIN payment_orders o ON o.id=i.order_id WHERE i.wallet=$1 AND o.status IN ('PENDING','EXPIRED') AND o.expires_at>=NOW()-INTERVAL '3 hours' LIMIT 1`, before["wallet_address"])
@@ -188,7 +193,7 @@ func (s *PaymentConfigService) guardUSDTWalletChange(ctx context.Context, previo
 	}
 	defer rows.Close()
 	if rows.Next() {
-		return errors.New("仍有待核验的 USDT 订单，请处理完成或等待订单到期满 3 小时后再更换钱包")
+		return errors.New("地址未保存：当前插件不能同时核验新旧钱包。请先升级 USDT 插件至 1.2.0，或等待旧订单到期满 3 小时后再更换")
 	}
 	return rows.Err()
 }

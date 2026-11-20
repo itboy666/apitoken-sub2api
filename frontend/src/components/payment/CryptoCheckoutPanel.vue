@@ -31,7 +31,8 @@
           <p>{{ t('payment.cryptoCheckout.fiatLabel') }} <strong>{{ checkout.fiat_amount }} {{ checkout.currency }}</strong></p>
           <p v-if="checkout.exchange_rate">1 USDT = {{ checkout.exchange_rate }} CNY <span aria-hidden="true">·</span> {{ t('payment.cryptoCheckout.precisionHint') }}</p>
         </div>
-        <p v-if="networkDelayed" role="alert" class="crypto-notice" data-testid="payment-network-delay">{{ t('payment.cryptoCheckout.networkDelayHint') }}</p>
+        <p v-if="walletChanged" role="alert" class="crypto-notice" data-testid="payment-wallet-changed">{{ t('payment.cryptoCheckout.walletChangedHint') }}</p>
+        <p v-else-if="networkDelayed" role="alert" class="crypto-notice" data-testid="payment-network-delay">{{ t('payment.cryptoCheckout.networkDelayHint') }}</p>
         <div v-if="canTransfer" class="crypto-transfer-grid">
           <div class="crypto-qr-column">
             <div class="crypto-qr"><img v-if="qr" data-testid="payment-qr" :src="qr" :alt="t('payment.cryptoCheckout.addressQR')" width="208" height="208" /><span v-else class="crypto-spinner" /></div>
@@ -60,7 +61,7 @@
     </div>
 
     <footer class="crypto-footer">
-      <div class="crypto-footer-help"><p>{{ t('payment.cryptoCheckout.checkHint') }}</p><button v-if="canTransfer" type="button" class="crypto-cancel" :disabled="checking" @click="confirmCancel = true">{{ t('payment.cryptoCheckout.cancelOrder') }}</button></div>
+      <div class="crypto-footer-help"><p>{{ t('payment.cryptoCheckout.checkHint') }}</p><button v-if="canCancel" type="button" class="crypto-cancel" :disabled="checking" @click="confirmCancel = true">{{ t('payment.cryptoCheckout.cancelOrder') }}</button></div>
       <div class="crypto-footer-actions">
         <button v-if="modal" type="button" class="crypto-button-secondary" @click="emit('close')">{{ t('common.close') }}</button>
         <RouterLink v-else to="/purchase" class="crypto-button-secondary">{{ t('payment.cryptoCheckout.back') }}</RouterLink>
@@ -95,7 +96,8 @@ let alive = true
 let timer: ReturnType<typeof setInterval> | undefined
 let revision = 0
 const outTradeNo = computed(() => props.outTradeNo)
-const canTransfer = computed(() => payable.value && !checkout.value?.confirming && !networkDelayed.value)
+const canCancel = computed(() => payable.value && !checkout.value?.confirming)
+const canTransfer = computed(() => canCancel.value && !networkDelayed.value && !walletChanged.value)
 const isUSDT = computed(() => checkout.value?.crypto === 'USDT' || !checkout.value)
 const networkBadge = computed(() => checkout.value?.network === 'usdt.trc20' ? 'TRC20' : networkName.value)
 const title = computed(() => isUSDT.value ? t('payment.cryptoCheckout.rechargeTitle') : t('payment.cryptoCheckout.title'))
@@ -103,6 +105,7 @@ const copyTarget = ref('')
 const networkName = computed(() => BEPUSDT_TRADE_TYPES.find(method => method.value === checkout.value?.network)?.label || checkout.value?.network)
 const coinName = computed(() => checkout.value?.crypto === 'GRAM' ? 'TON' : checkout.value?.crypto)
 const completed = computed(() => checkout.value?.status === 'COMPLETED')
+const walletChanged = computed(() => checkout.value?.wallet_changed === true && ['PENDING', 'EXPIRED'].includes(checkout.value?.status || ''))
 const networkDelayed = computed(() => checkout.value?.network_status === 'delayed' && ['PENDING', 'EXPIRED'].includes(checkout.value?.status || ''))
 const seconds = computed(() => Math.max(0, Math.ceil((new Date(checkout.value?.expires_at || 0).getTime() - now.value) / 1000)))
 const payable = computed(() => checkout.value?.status === 'PENDING' && (seconds.value > 0 || checkout.value.confirming))
@@ -114,6 +117,7 @@ const statusText = computed(() => {
   if (checkout.value?.confirming) return t('payment.cryptoCheckout.confirming')
   if (status === 'CANCELLED') return t('payment.cryptoCheckout.cancelled')
   if (status === 'FAILED') return t('payment.cryptoCheckout.failed')
+  if (walletChanged.value) return t('payment.cryptoCheckout.walletChanged')
   if (status === 'EXPIRED' || seconds.value === 0) return t('payment.cryptoCheckout.expired')
   if (networkDelayed.value) return t('payment.cryptoCheckout.networkDelayed')
   return t('payment.cryptoCheckout.waiting')
@@ -130,7 +134,8 @@ async function refresh(verify = false) {
     const changedAddress = checkout.value?.address !== data.address || !qr.value
     checkout.value = data
     error.value = ''
-    if (changedAddress) {
+    if (!canTransfer.value) qr.value = ''
+    else if (changedAddress) {
       const nextQR = await QRCode.toDataURL(data.address, { width: 240, margin: 2 })
       if (alive && currentRevision === revision) qr.value = nextQR
     }
