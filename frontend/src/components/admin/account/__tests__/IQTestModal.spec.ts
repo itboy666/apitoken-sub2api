@@ -7,9 +7,10 @@ import IQTestModal from '../IQTestModal.vue'
 import TestModelSelect from '../TestModelSelect.vue'
 import { apiClient } from '@/api/client'
 
-const { probeOpenAICodexState, getAvailableModels, getModelReasoning } = vi.hoisted(() => ({
-  probeOpenAICodexState: vi.fn(), getAvailableModels: vi.fn(), getModelReasoning: vi.fn()
+const { probeOpenAICodexState, getAvailableModels, getModelReasoning, listAuthConnections } = vi.hoisted(() => ({
+  probeOpenAICodexState: vi.fn(), getAvailableModels: vi.fn(), getModelReasoning: vi.fn(), listAuthConnections: vi.fn()
 }))
+vi.mock('@/api/admin/openaiAuthConnections', () => ({ listAuthConnections }))
 
 vi.mock('@/api/admin/accounts', async () => {
   const actual = await vi.importActual<typeof import('@/api/admin/accounts')>('@/api/admin/accounts')
@@ -19,6 +20,7 @@ vi.mock('@/api/admin/accounts', async () => {
 beforeEach(() => {
   getAvailableModels.mockReset().mockResolvedValue([])
   getModelReasoning.mockReset().mockResolvedValue({ supported_reasoning_levels: ['low', 'medium', 'high'], default_reasoning_level: 'medium' })
+  listAuthConnections.mockReset().mockResolvedValue([])
 })
 
 vi.mock('vue-i18n', async () => {
@@ -176,6 +178,7 @@ describe('IQTestModal', () => {
         mode: 'default',
         reasoning_effort: 'medium'
       })
+      expect(body).not.toHaveProperty('connection_id')
       expect(body.prompt).toContain('SVG 绘制一个鹈鹕骑自行车的 2D 动画')
       expect(body.prompt).toContain('直接返回独立 HTML')
       expect(body.prompt).not.toContain('不要有任何限制')
@@ -278,6 +281,113 @@ describe('IQTestModal', () => {
 
 })
 
+
+describe('Independent BPS question connections', () => {
+  const activeBPS = { id: 'bps-42', account_id: 42, kind: 'bps', label: 'Authorized fixture', legacy: false, status: 'active', capabilities: ['responses'], refresh_state: 'idle', preferred: false }
+  beforeEach(() => {
+    localStorage.clear()
+    listAuthConnections.mockResolvedValue([activeBPS])
+    global.fetch = vi.fn().mockResolvedValue(streamResponse([
+      { type: 'content', text: '21' }, { type: 'test_complete', success: true }
+    ]))
+  })
+
+  it('offers only usable BPS connections for this OAuth account', async () => {
+    listAuthConnections.mockResolvedValue([
+      activeBPS,
+      { ...activeBPS, id: 'other-account', account_id: 43 },
+      { ...activeBPS, id: 'disabled', status: 'disabled' },
+      { ...activeBPS, id: 'identity-only', capabilities: [] },
+      { ...activeBPS, id: 'refreshing', refresh_state: 'in_progress' },
+      { ...activeBPS, id: 'cooldown', cooldown_until: new Date(Date.now() + 60_000).toISOString() },
+      { ...activeBPS, id: 'legacy', legacy: true },
+      { ...activeBPS, id: 'codex', kind: 'codex', preferred: true, label: 'Original Codex' }
+    ])
+    const wrapper = mountModal()
+    await flushPromises()
+    expect(wrapper.findAll('[data-testid="test-connection-select"] option').map(option => option.attributes('value'))).toEqual(['', 'bps-42'])
+    expect(wrapper.get('[data-testid="test-connection-select"]').text()).toContain('CODEX · Original Codex')
+    wrapper.unmount()
+  })
+
+  it('freezes the selected connection for all samples and stores only server evidence as the confirmed connection', async () => {
+    const finish: Array<(response: Response) => void> = []
+    global.fetch = vi.fn().mockImplementation(() => new Promise(resolve => { finish.push(resolve) }))
+    const wrapper = mountModal()
+    await flushPromises()
+    await wrapper.get('[data-testid="test-connection-select"]').setValue('bps-42')
+    ;(wrapper.vm as any).parallelCount = 2
+    const pending = (wrapper.vm as any).startTest()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="test-connection-select"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-testid="run-connection-evidence"]').text()).toContain('connectionUnconfirmed')
+    expect(wrapper.get('[data-testid="run-connection-evidence"]').text()).not.toContain('Authorized fixture')
+    finish.forEach(resolve => resolve(streamResponse([
+      { type: 'auth_connection', connection_id: 'bps-42', connection_kind: 'bps', connection_label: 'Confirmed server connection' },
+      { type: 'upstream_response', upstream_status: 200, upstream_model: 'gpt-6.1-sol' },
+      { type: 'content', text: '21' }, { type: 'test_complete', success: true }
+    ])))
+    await pending
+    await flushPromises()
+    expect(global.fetch).toHaveBeenCalledTimes(2)
+    for (const [, request] of vi.mocked(global.fetch).mock.calls) expect(JSON.parse(request!.body as string).connection_id).toBe('bps-42')
+    expect(wrapper.get('[data-testid="run-connection-evidence"]').text()).toContain('BPS · Confirmed server connection')
+    expect(wrapper.get('[data-testid="run-upstream-evidence"]').text()).toContain('HTTP 200 · gpt-6.1-sol')
+    const run = JSON.parse(localStorage.getItem('sub2api-pelican-test:42')!)[0].runs[0]
+    expect(run).toMatchObject({ status: 'success', requestedConnectionId: 'bps-42', connectionId: 'bps-42', connectionLabel: 'Confirmed server connection', upstreamStatus: 200 })
+    wrapper.unmount()
+  })
+
+  it.each(['missing', 'different'])('does not claim BPS success when server evidence is %s', async evidence => {
+    global.fetch = vi.fn().mockResolvedValue(streamResponse([
+      ...(evidence === 'different' ? [{ type: 'auth_connection', connection_id: 'another-connection', connection_kind: 'bps', connection_label: 'Wrong grant' }] : []),
+      { type: 'content', text: '21' }, { type: 'test_complete', success: true }
+    ]))
+    const wrapper = mountModal()
+    await flushPromises()
+    await wrapper.get('[data-testid="test-connection-select"]').setValue('bps-42')
+    await (wrapper.vm as any).startTest()
+    expect((wrapper.vm as any).runs[0]).toMatchObject({ status: 'error' })
+    expect((wrapper.vm as any).runs[0].connectionId).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('blocks a revoked selection after refresh without silently reverting to the production route', async () => {
+    const wrapper = mountModal()
+    await flushPromises()
+    await wrapper.get('[data-testid="test-connection-select"]').setValue('bps-42')
+    listAuthConnections.mockResolvedValue([])
+    await (wrapper.vm as any).loadConnections()
+    await (wrapper.vm as any).startTest()
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect((wrapper.vm as any).connectionId).toBe('bps-42')
+    expect(wrapper.get('[role="alert"]').text()).toContain('connectionUnavailable')
+    wrapper.unmount()
+  })
+
+  it('ignores stale connection discovery and resets selection when the account changes', async () => {
+    let resolveOld!: (connections: unknown[]) => void
+    listAuthConnections.mockReturnValueOnce(new Promise(resolve => { resolveOld = resolve }))
+    const wrapper = mountModal()
+    await wrapper.setProps({ account: { id: 43, name: 'Second account', platform: 'openai', type: 'oauth' } as any })
+    await flushPromises()
+    resolveOld([activeBPS])
+    await flushPromises()
+    expect(wrapper.findAll('[data-testid="test-connection-select"] option').map(option => option.attributes('value'))).toEqual([''])
+    expect((wrapper.vm as any).connectionId).toBe('')
+    wrapper.unmount()
+  })
+
+  it('does not load or submit independent OAuth connections for API-key accounts', async () => {
+    const wrapper = mountModal({ type: 'apikey' })
+    await flushPromises()
+    expect(listAuthConnections).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="test-connection-select"]').exists()).toBe(false)
+    await (wrapper.vm as any).startTest()
+    expect(JSON.parse(vi.mocked(global.fetch).mock.calls[0][1]!.body as string)).not.toHaveProperty('connection_id')
+    wrapper.unmount()
+  })
+})
 
 describe('Intelligence question selection', () => {
   it('defaults to candy and accepts plain text without an HTML contract', async () => {

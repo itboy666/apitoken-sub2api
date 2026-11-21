@@ -268,6 +268,10 @@ func (s *OpenAIGatewayService) forwardExcelBPS(ctx context.Context, c *gin.Conte
 	}
 	originalModel := gjson.GetBytes(body, "model").String()
 	model := account.GetMappedModel(originalModel)
+	if probe, explicit := adminConnectionProbeFromContext(ctx); explicit &&
+		(!probe.matchesRequest(ctx, account, originalModel) || !probe.matchesProjection(ctx, account) || model != probe.mappedModel) {
+		return nil, adminConnectionProbeUnavailable()
+	}
 	stream := gjson.GetBytes(body, "stream").Bool()
 	clientCanceled := func() (*OpenAIForwardResult, error) {
 		StopOpenAICompactSSEKeepaliveCommitted(c)

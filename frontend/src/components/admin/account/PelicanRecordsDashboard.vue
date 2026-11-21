@@ -31,6 +31,8 @@
             <div class="mt-2 space-y-1 text-xs text-gray-500">
               <p>{{ card.record.modelId || '—' }} / {{ card.record.reasoningEffort || '—' }}</p>
               <p>{{ t('admin.accounts.pelicanTest.generatedAt') }}：{{ formatDate(card.record.startedAt) }}</p>
+              <p v-if="card.record.connectionId" class="break-words" data-testid="record-connection">{{ t('admin.accounts.pelicanTest.confirmedConnection') }}：BPS · {{ card.record.connectionLabel || card.record.connectionId }}</p>
+              <p v-if="card.record.upstreamStatus">{{ t('admin.accounts.pelicanTest.upstreamResponse') }}：HTTP {{ card.record.upstreamStatus }}<span v-if="card.record.upstreamModel"> · {{ card.record.upstreamModel }}</span></p>
             </div>
             <div class="mt-3 aspect-[4/3] overflow-hidden rounded-xl bg-gray-50">
               <iframe v-if="card.record.html" :srcdoc="card.record.html" class="pointer-events-none h-full w-full border-0" tabindex="-1" sandbox="allow-scripts" referrerpolicy="no-referrer" :title="card.account.name" />
@@ -54,6 +56,8 @@
             <strong>{{ selected.account.name }}</strong>
             <p>{{ sourceLabel(selected.record.source) }} · {{ selected.record.modelId || '—' }} / {{ selected.record.reasoningEffort || '—' }} · {{ duration(selected.record.durationMs) }}</p>
             <p class="text-xs text-gray-500">{{ formatDate(selected.record.startedAt) }}</p>
+            <p v-if="selected.record.connectionId" class="break-words text-xs text-gray-500" data-testid="record-detail-connection">{{ t('admin.accounts.pelicanTest.confirmedConnection') }}：BPS · {{ selected.record.connectionLabel || selected.record.connectionId }}</p>
+            <p v-if="selected.record.upstreamStatus" class="text-xs text-gray-500">{{ t('admin.accounts.pelicanTest.upstreamResponse') }}：HTTP {{ selected.record.upstreamStatus }}<span v-if="selected.record.upstreamModel"> · {{ selected.record.upstreamModel }}</span></p>
           </div>
           <button type="button" class="btn btn-secondary" @click="selected = null">{{ t('common.close') }}</button>
         </header>
@@ -75,7 +79,14 @@ import { extractPelicanHtml } from '@/utils/pelicanHtml'
 import { isTextAnswerKind, stateProbeVerdict, type StateProbeVerdict } from '@/utils/intelligenceTest'
 import type { Account, AccountListItem, PelicanQuestion, PelicanTestConfig, ScheduledTestResult } from '@/types'
 
-interface ManualRun {
+interface ConnectionEvidence {
+  connectionId?: string
+  connectionKind?: string
+  connectionLabel?: string
+  upstreamStatus?: number
+  upstreamModel?: string
+}
+interface ManualRun extends ConnectionEvidence {
   id?: string
   html?: string
   output?: string
@@ -98,7 +109,7 @@ interface ManualRecord {
   questionKind?: PelicanTestConfig['question_kind']
   runs: ManualRun[]
 }
-interface DisplayRecord {
+interface DisplayRecord extends ConnectionEvidence {
   pelicanQuestion?: PelicanQuestion
   actualPrompt?: string
   source: 'manual' | 'scheduled'
@@ -196,6 +207,10 @@ function manualCards(server: PelicanHistoryResult[]): Card[] {
           pelicanQuestion: record.pelicanQuestion, actualPrompt: record.actualPrompt || record.prompt,
           source: 'manual', startedAt: run.startedAt || record.createdAt, durationMs: run.durationMs,
           modelId: run.modelId || record.modelId, reasoningEffort: run.reasoningEffort || record.reasoningEffort,
+          connectionId: run.connectionKind === 'bps' && typeof run.connectionId === 'string' ? run.connectionId : undefined,
+          connectionLabel: typeof run.connectionLabel === 'string' ? run.connectionLabel : undefined,
+          upstreamStatus: typeof run.upstreamStatus === 'number' && Number.isInteger(run.upstreamStatus) && run.upstreamStatus >= 100 && run.upstreamStatus <= 599 ? run.upstreamStatus : undefined,
+          upstreamModel: typeof run.upstreamModel === 'string' ? run.upstreamModel : undefined,
           status: run.status || (html ? 'success' : 'error'), html, output, error: run.error || ''
         } })
       })

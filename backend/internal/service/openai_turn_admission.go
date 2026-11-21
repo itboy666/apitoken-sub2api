@@ -277,7 +277,10 @@ func (s *OpenAIGatewayService) latestOpenAITurnAccountForGroup(
 		}
 		authoritativeRead = true
 	} else {
-		if ttl := s.openAITurnAdmissionCacheTTL(); ttl > 0 {
+		// An explicit admin connection probe rechecks after refresh/proxy waits;
+		// its final send must not reuse an older eligible parent from this cache.
+		_, explicitProbe := adminConnectionProbeFromContext(ctx)
+		if ttl := s.openAITurnAdmissionCacheTTL(); ttl > 0 && !explicitProbe {
 			if cached, cachedParent, ok := s.openAITurnAdmissionCache.load(selected.ID, ttl); ok {
 				latest, parent, authoritativeRead = cached, cachedParent, true
 			}

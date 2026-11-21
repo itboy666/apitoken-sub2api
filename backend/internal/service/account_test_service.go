@@ -56,6 +56,9 @@ type TestEvent struct {
 	UpstreamModel     string                           `json:"upstream_model,omitempty"`
 	RequestID         string                           `json:"request_id,omitempty"`
 	UpstreamErrorCode string                           `json:"upstream_error_code,omitempty"`
+	ConnectionID      string                           `json:"connection_id,omitempty"`
+	ConnectionKind    string                           `json:"connection_kind,omitempty"`
+	ConnectionLabel   string                           `json:"connection_label,omitempty"`
 	Type              string                           `json:"type"`
 	Text              string                           `json:"text,omitempty"`
 	Model             string                           `json:"model,omitempty"`
@@ -401,6 +404,14 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 	}
 	bindAccountTestPlatform(c, account)
 	recordQualityBatchRoute(c, account, modelID, account.Platform+":"+account.GetAPIProtocol())
+	if probe, explicit := adminConnectionProbeFromContext(ctx); explicit {
+		if !probe.matchesRequest(ctx, account, modelID) || normalizeAccountTestMode(mode) != AccountTestModeDefault ||
+			testOpts.ImageDataURL != "" || testOpts.AudioDataURL != "" {
+			return s.sendErrorAndEnd(c, adminConnectionProbeUnavailable().Error())
+		}
+		recordQualityBatchRoute(c, account, modelID, "openai:bps:connection")
+		return s.testResponsesGatewayAccountConnection(c, account, modelID, prompt)
+	}
 	if expected, ok := ctx.Value(modelTraceContextKey{}).(modelTraceEnvironment); ok {
 		actual, err := modelTraceEnvironmentForAccount(account, modelID)
 		if err != nil || actual != expected {
@@ -1184,11 +1195,19 @@ func (s *AccountTestService) testResponsesGatewayAccountConnection(c *gin.Contex
 	if model == "" {
 		model = openai.DefaultTestModel
 	}
+	requestModel := model
 	model = account.GetMappedModel(model)
 	prompt = promptOrDefault(prompt)
 	s.sendEvent(c, TestEvent{Type: "test_start", Model: model})
 
-	body, err := buildExcelBPSAccountTestBody(model, prompt)
+	// The gateway maps a model once. Keep the requested name on explicit
+	// connection probes so chained mappings cannot silently change the target.
+	bodyModel := model
+	if _, explicit := adminConnectionProbeFromContext(c.Request.Context()); explicit {
+		bodyModel = requestModel
+	}
+	options, _ := pelicanTestOptionsFromContext(c.Request.Context())
+	body, err := buildExcelBPSAccountTestBody(bodyModel, prompt, options.reasoningEffort)
 	if err != nil {
 		return s.sendErrorAndEnd(c, "Failed to create Excel BPS test payload")
 	}
@@ -1196,8 +1215,22 @@ func (s *AccountTestService) testResponsesGatewayAccountConnection(c *gin.Contex
 	probe := httptest.NewRecorder()
 	probeCtx, _ := gin.CreateTestContext(probe)
 	probeCtx.Request = c.Request.Clone(s.withBPSTestEvidence(c.Request.Context(), c))
+	// The cloned request represents a Responses turn, not the admin endpoint.
+	// Capability checks must see its actual protocol without changing the caller.
+	if probeCtx.Request.URL == nil {
+		probeCtx.Request.URL = &url.URL{}
+	}
+	probeCtx.Request.URL.Path = "/v1/responses"
+	probeCtx.Request.URL.RawPath = ""
+	probeCtx.Request.URL.RawQuery = ""
 	if probeCtx.Request.Header == nil {
 		probeCtx.Request.Header = make(http.Header)
+	}
+	if _, explicit := adminConnectionProbeFromContext(c.Request.Context()); explicit {
+		// Selecting a different registration is not permission to bypass the
+		// parent account's persisted model isolation or cooldown.
+		probeCtx.Request = probeCtx.Request.WithContext(context.WithValue(probeCtx.Request.Context(), qualityProbeContextKey{}, false))
+		probeCtx.Request.Header.Set("Session-Id", "account-test-"+uuid.NewString())
 	}
 	// Manual one-shot tests have no client conversation. Give them a scoped
 	// identity so enabling the session proxy does not break the test button.
@@ -1260,13 +1293,17 @@ func (s *AccountTestService) testResponsesGatewayAccountConnection(c *gin.Contex
 	return nil
 }
 
-func buildExcelBPSAccountTestBody(model, prompt string) ([]byte, error) {
+func buildExcelBPSAccountTestBody(model, prompt string, efforts ...string) ([]byte, error) {
+	effort := "medium"
+	if len(efforts) > 0 && normalizePelicanReasoningEffort(efforts[0]) != "" {
+		effort = normalizePelicanReasoningEffort(efforts[0])
+	}
 	return json.Marshal(map[string]any{
 		"model": model, "stream": true, "store": false,
 		"input": []any{map[string]any{"type": "message", "role": "user", "content": []any{
 			map[string]any{"type": "input_text", "text": promptOrDefault(prompt)},
 		}}},
-		"reasoning": map[string]any{"effort": "medium"},
+		"reasoning": map[string]any{"effort": effort},
 	})
 }
 

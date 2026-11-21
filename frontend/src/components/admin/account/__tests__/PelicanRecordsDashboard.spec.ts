@@ -10,6 +10,19 @@ function render(extra = {}) { return mount(Dashboard, { props: { accounts: [], a
 beforeEach(() => { vi.useFakeTimers(); vi.resetAllMocks(); localStorage.clear(); vi.mocked(api.listPelicanHistory).mockResolvedValue({ items: [], next_cursor: 0 }) })
 afterEach(() => { vi.useRealTimers() })
 describe('Pelican record dashboard', () => {
+  it('preserves confirmed BPS evidence in saved cards and detail without treating a requested connection as evidence', async () => {
+    const bps = { ...manual, id: 'bps', questionKind: 'candy', runs: [{ ...manual.runs[0], html: '', output: '21', connectionId: 'bps-42', connectionKind: 'bps', connectionLabel: 'Verified BPS', upstreamStatus: 200, upstreamModel: 'gpt-6.1-sol' }] }
+    localStorage.setItem('sub2api-pelican-test:42', JSON.stringify([bps, { ...manual, id: 'unconfirmed', runs: [{ ...manual.runs[0], requestedConnectionId: 'only-requested' }] }]))
+    const wrapper = render({ manualRecord: null, accountOnly: true })
+    await flushPromises()
+    expect(wrapper.findAll('[data-testid="record-connection"]')).toHaveLength(1)
+    const card = wrapper.findAll('article').find(item => item.text().includes('Verified BPS'))!
+    expect(card.text()).toContain('HTTP 200 · gpt-6.1-sol')
+    expect(wrapper.text()).not.toContain('only-requested')
+    await card.get('button').trigger('click')
+    expect(wrapper.get('[data-testid="record-detail-connection"]').text()).toContain('BPS · Verified BPS')
+    wrapper.unmount()
+  })
   it('shows and opens a manual result when the current account is outside the list', async () => {
     const wrapper = render(); await flushPromises()
     expect(wrapper.findAll('[data-testid="pelican-record-card"]')).toHaveLength(1)

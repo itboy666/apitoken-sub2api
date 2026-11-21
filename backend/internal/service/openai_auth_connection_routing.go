@@ -81,6 +81,10 @@ func (s *OpenAIGatewayService) prepareAuthConnection(ctx context.Context, c *gin
 	if c != nil {
 		c.Set("openai_auth_connection_id", "")
 	}
+	probe, explicitProbe := adminConnectionProbeFromContext(ctx)
+	if explicitProbe && (!probe.matchesRequest(ctx, account, model) || connectionCapabilityForRequest(c) != "responses" || !s.excelBPSGloballyEnabled(ctx)) {
+		return nil, adminConnectionProbeUnavailable()
+	}
 	managed := account.HasManagedOpenAIConnections()
 	if account != nil && account.Platform == PlatformOpenAI && s.excelOAuthReauth != nil {
 		if repo, ok := s.excelOAuthReauth.repo.(OpenAIAuthConnectionRepository); ok {
@@ -91,7 +95,7 @@ func (s *OpenAIGatewayService) prepareAuthConnection(ctx context.Context, c *gin
 			managed = current
 		}
 	}
-	if !managed {
+	if !managed && !explicitProbe {
 		return account, nil
 	}
 
@@ -110,6 +114,9 @@ func (s *OpenAIGatewayService) prepareAuthConnection(ctx context.Context, c *gin
 	if selected != nil {
 		pinned = selected.AuthConnectionID
 	}
+	if explicitProbe {
+		pinned = probe.connectionID
+	}
 	var chosen *OpenAIAuthConnection
 	if pinned == "" {
 		for _, candidate := range connections {
@@ -119,7 +126,7 @@ func (s *OpenAIGatewayService) prepareAuthConnection(ctx context.Context, c *gin
 			}
 		}
 	}
-	if pinned != "" && c != nil && c.GetString("openai_auth_connection_session_hash") != "" {
+	if !explicitProbe && pinned != "" && c != nil && c.GetString("openai_auth_connection_session_hash") != "" {
 		r, repoErr := s.excelOAuthReauth.connectionRepository()
 		if repoErr != nil {
 			return nil, repoErr
@@ -134,6 +141,9 @@ func (s *OpenAIGatewayService) prepareAuthConnection(ctx context.Context, c *gin
 			continue
 		}
 		if pinned != "" && candidate.ID != pinned {
+			continue
+		}
+		if explicitProbe && !probe.permitsConnection(candidate) {
 			continue
 		}
 		if candidate.Supports(capability) && (chosen == nil || candidate.Preferred) {
@@ -151,7 +161,7 @@ func (s *OpenAIGatewayService) prepareAuthConnection(ctx context.Context, c *gin
 	if err != nil {
 		return nil, err
 	}
-	if !chosen.Supports(capability) {
+	if !chosen.Supports(capability) || explicitProbe && !probe.permitsConnection(chosen) {
 		return nil, connectionChanged()
 	}
 	creds, err := s.excelOAuthReauth.readConnectionCredentials(chosen)
@@ -207,9 +217,20 @@ func (s *OpenAIGatewayService) prepareAuthConnection(ctx context.Context, c *gin
 	if s.openAICodexTicketBlocksAccount(&out, model) {
 		return nil, denyOpenAITicket()
 	}
+	if explicitProbe {
+		if !probe.matchesProjection(ctx, &out) {
+			return nil, adminConnectionProbeUnavailable()
+		}
+		if err := validateOpenAIConnectionKind(&out); err != nil {
+			return nil, err
+		}
+	}
 	if c != nil {
 		c.Set("openai_auth_connection_id", chosen.ID)
 		c.Set(codexAccountIdentitySourceContextKey, &out)
+	}
+	if observer, ok := ctx.Value(bpsTestResponseObserverKey{}).(bpsTestResponseObserver); ok {
+		observer(TestEvent{Type: "auth_connection", ConnectionID: chosen.ID, ConnectionKind: chosen.Kind, ConnectionLabel: chosen.Label})
 	}
 	return &out, nil
 }
@@ -280,6 +301,10 @@ func (s *OpenAIOAuthReauthService) ValidateAuthConnectionSend(ctx context.Contex
 	if err != nil {
 		return err
 	}
+	if probe, explicit := adminConnectionProbeFromContext(ctx); explicit &&
+		(!probe.matchesProjection(ctx, a) || !probe.permitsConnection(c)) {
+		return adminConnectionProbeUnavailable()
+	}
 	if c.Revision != a.AuthConnectionRevision || c.Status != "active" || (c.RefreshState != "" && c.RefreshState != "idle") || len(c.Capabilities) == 0 || c.CooldownUntil != nil && time.Now().Before(*c.CooldownUntil) {
 		return connectionChanged()
 	}
@@ -299,6 +324,14 @@ func (s *OpenAIOAuthReauthService) validateAuthConnectionPolicy(ctx context.Cont
 	managed, err := repo.AuthConnectionsManaged(ctx, a.ID)
 	if err != nil {
 		return err
+	}
+	if probe, explicit := adminConnectionProbeFromContext(ctx); explicit {
+		if !probe.matchesProjection(ctx, a) {
+			return adminConnectionProbeUnavailable()
+		}
+		// This one administrator request does not change preferred routing.
+		// The ordinary revision/status/cooldown fence still runs before sending.
+		return nil
 	}
 	if managed && a.AuthConnectionID == "" {
 		return infraerrors.Conflict("OPENAI_CONNECTION_SELECTION_CHANGED", "Account authorization selection changed; retry with the current connection")

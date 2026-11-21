@@ -146,6 +146,19 @@
           :hint="t('admin.accounts.pelicanTest.promptHint')"
         />
         <div class="space-y-3">
+          <div v-if="connectionSupported" data-testid="test-connection-field">
+            <div class="mb-1.5 flex items-center justify-between gap-2">
+              <label for="question-connection" class="input-label">{{ t('admin.accounts.pelicanTest.connection') }}</label>
+              <button type="button" class="text-xs text-primary-600 hover:underline disabled:opacity-50 dark:text-primary-400" :disabled="running || connectionsLoading" @click="loadConnections">{{ t('admin.accounts.pelicanTest.refreshConnections') }}</button>
+            </div>
+            <select id="question-connection" v-model="connectionId" class="input w-full" :disabled="running || connectionsLoading" aria-describedby="question-connection-hint" data-testid="test-connection-select">
+              <option value="">{{ t('admin.accounts.pelicanTest.currentConnection') }}{{ currentConnectionLabel ? ` · ${currentConnectionLabel}` : '' }}</option>
+              <option v-for="connection in testConnections" :key="connection.id" :value="connection.id">BPS · {{ connection.label }}</option>
+            </select>
+            <p id="question-connection-hint" class="mt-2 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.pelicanTest.connectionHint') }}</p>
+            <p v-if="connectionsLoading" role="status" class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.pelicanTest.connectionsLoading') }}</p>
+            <p v-if="connectionsError" role="alert" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ connectionsError }}</p>
+          </div>
           <TestModelSelect
             id="question-model"
             v-model="modelId"
@@ -258,6 +271,10 @@
               <div>{{ t(run.source === 'scheduled' ? 'admin.accounts.pelicanTest.sourceScheduled' : 'admin.accounts.pelicanTest.sourceManual') }} · {{ run.modelId || '—' }} / {{ run.reasoningEffort || '—' }}</div>
               <div>{{ t('admin.accounts.pelicanTest.generatedAt') }}：{{ run.startedAt ? formatDate(run.startedAt) : '—' }}</div>
               <div>{{ t('admin.accounts.pelicanTest.duration') }}：{{ run.durationMs == null ? '—' : `${(run.durationMs / 1000).toFixed(1)} s` }}</div>
+              <div v-if="run.source === 'manual'" data-testid="run-connection-evidence">
+                {{ t('admin.accounts.pelicanTest.confirmedConnection') }}：{{ run.connectionId ? `${run.connectionKind?.toUpperCase()} · ${run.connectionLabel || run.connectionId}` : t('admin.accounts.pelicanTest.connectionUnconfirmed') }}
+              </div>
+              <div v-if="run.upstreamStatus" data-testid="run-upstream-evidence">{{ t('admin.accounts.pelicanTest.upstreamResponse') }}：HTTP {{ run.upstreamStatus }}<span v-if="run.upstreamModel"> · {{ run.upstreamModel }}</span></div>
             </div>
             <div v-if="run.html" class="aspect-[4/3] bg-white dark:bg-white">
               <iframe :srcdoc="run.html" class="h-full w-full border-0" sandbox="allow-scripts" referrerpolicy="no-referrer" :title="`${t('admin.accounts.pelicanTest.output')} ${index + 1}`"></iframe>
@@ -311,6 +328,7 @@ import { currentPelicanQuestionRound, preparePelicanQuestionRound } from '@/util
 import { buildApiUrl } from '@/api/client'
 import { ADMIN_UI_REQUEST_HEADER } from '@/api/adminUIRequest'
 import { getAvailableModels, getModelReasoning, probeOpenAICodexState, type OpenAICodexStateProbeResult, type OpenAICodexStateVerdict } from '@/api/admin/accounts'
+import { listAuthConnections, type OpenAIAuthConnection } from '@/api/admin/openaiAuthConnections'
 import type { Account, AccountListItem, PelicanQuestion, PelicanTestConfig, ScheduledTestResult } from '@/types'
 import ScheduledTestsPanel from './ScheduledTestsPanel.vue'
 import PelicanRecordsDashboard from './PelicanRecordsDashboard.vue'
@@ -344,6 +362,12 @@ interface TestRun {
   durationMs?: number
   modelId?: string
   reasoningEffort?: string
+  requestedConnectionId?: string
+  connectionId?: string
+  connectionKind?: string
+  connectionLabel?: string
+  upstreamStatus?: number
+  upstreamModel?: string
 }
 interface TestRecord {
   pelicanQuestion?: PelicanQuestion
@@ -418,6 +442,48 @@ const controllers = new Map<string, AbortController>()
 const testMode = ref<TestMode>('question')
 const probeResults = ref<OpenAICodexStateProbeResult[]>([])
 const probeError = ref('')
+const connectionSupported = computed(() => props.account?.platform === 'openai' && props.account.type === 'oauth')
+const connectionId = ref('')
+const connections = ref<OpenAIAuthConnection[]>([])
+const connectionsLoading = ref(false)
+const connectionsError = ref('')
+const testConnections = computed(() => connections.value.filter(connection =>
+  connection.account_id === props.account?.id && !connection.legacy && connection.kind === 'bps' &&
+  connection.status === 'active' && connection.capabilities.includes('responses') &&
+  (!connection.refresh_state || connection.refresh_state === 'idle') &&
+  (!connection.cooldown_until || Date.parse(connection.cooldown_until) <= Date.now())
+))
+const currentConnectionLabel = computed(() => {
+  const current = connections.value.find(connection => connection.preferred)
+  return current ? `${current.kind.toUpperCase()} · ${current.label}` : ''
+})
+const selectedConnectionAvailable = computed(() => !connectionId.value || (connectionSupported.value && testConnections.value.some(connection => connection.id === connectionId.value)))
+let connectionLoadToken = 0
+async function loadConnections() {
+  const token = ++connectionLoadToken
+  const accountId = props.account?.id
+  connectionsError.value = ''
+  if (!props.show || !accountId || !connectionSupported.value) {
+    connections.value = []
+    connectionsLoading.value = false
+    return
+  }
+  connectionsLoading.value = true
+  try {
+    const result = await listAuthConnections(accountId)
+    if (token !== connectionLoadToken || props.account?.id !== accountId || !props.show) return
+    connections.value = result
+    // Do not silently fall back to the production route when a chosen grant
+    // disappears. Keep the selection invalid until the user chooses a route.
+    if (!selectedConnectionAvailable.value) connectionsError.value = t('admin.accounts.pelicanTest.connectionUnavailable')
+  } catch {
+    if (token !== connectionLoadToken || props.account?.id !== accountId || !props.show) return
+    connections.value = []
+    connectionsError.value = t('admin.accounts.pelicanTest.connectionsLoadFailed')
+  } finally {
+    if (token === connectionLoadToken) connectionsLoading.value = false
+  }
+}
 
 const deliveryContract = computed(() => questionContract(questionKind.value))
 const questionOptions = computed(() => ['candy', 'pelican'].map(value => ({ value, label: t(`admin.accounts.pelicanTest.${value}Question`) })))
@@ -431,7 +497,7 @@ const reasoningOptions = computed(() => reasoningLevels.value.map((value) => ({
   value,
   label: ({ low: t('admin.accounts.pelicanTest.reasoningLow'), medium: t('admin.accounts.pelicanTest.reasoningMedium'), high: t('admin.accounts.pelicanTest.reasoningHigh'), none: t('admin.accounts.pelicanTest.reasoningNone'), minimal: t('admin.accounts.pelicanTest.reasoningMinimal'), xhigh: t('admin.accounts.pelicanTest.reasoningXHigh'), max: t('admin.accounts.pelicanTest.reasoningMax'), ultra: t('admin.accounts.pelicanTest.reasoningUltra') } as Record<string, string>)[value] || value
 })))
-const canStart = computed(() => Boolean(props.account && !preparingQuestion.value && (promptMode.value === 'random' ? (questionSnapshot.value?.actual_prompt && questionSnapshot.value.pelican_question?.round_id.startsWith('manual:')) : prompt.value.trim()) && modelId.value.trim() && normalizeCount() > 0))
+const canStart = computed(() => Boolean(props.account && selectedConnectionAvailable.value && !(connectionId.value && connectionsLoading.value) && !preparingQuestion.value && (promptMode.value === 'random' ? (questionSnapshot.value?.actual_prompt && questionSnapshot.value.pelican_question?.round_id.startsWith('manual:')) : prompt.value.trim()) && modelId.value.trim() && normalizeCount() > 0))
 const hasDownloadable = computed(() => runs.value.some((run) => Boolean(run.output)))
 const probeSupported = computed(() => props.account?.platform === 'openai' && (props.account.type === 'oauth' || props.account.type === 'setup-token'))
 const canStartProbe = computed(() => Boolean(props.account && probeSupported.value))
@@ -606,6 +672,7 @@ interface ManualRound {
   prompt: string
   actualPrompt: string
   question?: PelicanQuestion
+  connectionId?: string
 }
 async function consumeRun(run: TestRun, signal: AbortSignal, round: ManualRound) {
   const response = await fetch(buildApiUrl(`/admin/accounts/${round.accountId}/pelican-test`), {
@@ -621,6 +688,7 @@ async function consumeRun(run: TestRun, signal: AbortSignal, round: ManualRound)
       prompt_mode: round.question ? 'random' : 'custom',
       pelican_question: round.question,
       mode: 'default',
+      connection_id: round.connectionId,
       reasoning_effort: round.reasoningEffort
     }),
     signal
@@ -635,13 +703,23 @@ async function consumeRun(run: TestRun, signal: AbortSignal, round: ManualRound)
     if (!line.startsWith('data:')) return
     const json = line.replace(/^data:\s*/, '').trim()
     if (!json) return
-    let event: { type?: string; text?: string; success?: boolean; error?: string }
+    let event: { type?: string; text?: string; success?: boolean; error?: string; connection_id?: string; connection_kind?: string; connection_label?: string; upstream_status?: number; upstream_model?: string }
     try {
-      event = JSON.parse(json) as { type?: string; text?: string; success?: boolean; error?: string }
+      event = JSON.parse(json)
     } catch {
       return
     }
     if (event.type === 'content' && event.text) run.output += event.text
+    if (event.type === 'auth_connection' && typeof event.connection_id === 'string' && event.connection_kind === 'bps') {
+      if (round.connectionId && event.connection_id !== round.connectionId) throw new Error(t('admin.accounts.pelicanTest.connectionMismatch'))
+      run.connectionId = event.connection_id
+      run.connectionKind = event.connection_kind
+      run.connectionLabel = typeof event.connection_label === 'string' ? event.connection_label : ''
+    }
+    if (event.type === 'upstream_response') {
+      if (typeof event.upstream_status === 'number' && Number.isInteger(event.upstream_status) && event.upstream_status >= 100 && event.upstream_status <= 599) run.upstreamStatus = event.upstream_status
+      if (typeof event.upstream_model === 'string') run.upstreamModel = event.upstream_model
+    }
     if (event.type === 'test_complete') {
       completed = true
       if (!event.success) throw new Error(event.error || t('admin.accounts.pelicanTest.failed'))
@@ -657,6 +735,7 @@ async function consumeRun(run: TestRun, signal: AbortSignal, round: ManualRound)
     for (const line of lines) consumeLine(line.trim())
   }
   if (buffer.trim()) consumeLine(buffer.trim())
+  if (round.connectionId && run.connectionId !== round.connectionId) throw new Error(t('admin.accounts.pelicanTest.connectionUnconfirmed'))
   if (!completed || !run.output.trim()) throw new Error(t('admin.accounts.pelicanTest.emptyResponse'))
   run.html = run.questionKind === 'candy' ? '' : extractHtml(run.output)
   if (run.questionKind !== 'candy' && !run.html) throw new Error(t('admin.accounts.pelicanTest.invalidHtml'))
@@ -691,6 +770,7 @@ async function startTest() {
     prompt: question?.prompt || prompt.value.trim(),
     actualPrompt: question ? questionSnapshot.value!.actual_prompt! : `${prompt.value.trim()}\n\n${deliveryContract.value}`,
     question: question ? JSON.parse(JSON.stringify(question)) : undefined,
+    connectionId: connectionId.value || undefined,
   }
   const count = normalizeCount()
   parallelCount.value = count
@@ -703,7 +783,8 @@ async function startTest() {
     error: '',
     source: 'manual',
     modelId: modelId.value.trim(),
-    reasoningEffort: reasoningEffort.value
+    reasoningEffort: reasoningEffort.value,
+    requestedConnectionId: round.connectionId
   }))
   activeTab.value = 'results'
   running.value = true
@@ -765,10 +846,14 @@ function downloadAll() {
 onBeforeUnmount(() => { for (const controller of controllers.values()) controller.abort() })
 
 watch(modelId, () => { if (props.show) loadReasoning() })
+watch(connectionId, () => { if (selectedConnectionAvailable.value) connectionsError.value = '' })
 
-watch(() => [props.show, props.account?.id] as const, ([show]) => {
+watch(() => [props.show, props.account?.id, props.account?.platform, props.account?.type] as const, ([show]) => {
   // The records window never outlives the dialog or carries over to another account.
   recordsView.value = null
+  connectionId.value = ''
+  connections.value = []
+  void loadConnections()
   if (show) {
     readRecords()
     activeTab.value = 'results'

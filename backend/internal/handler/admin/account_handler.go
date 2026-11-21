@@ -1435,6 +1435,7 @@ type PelicanTestRequest struct {
 	ModelID         string                   `json:"model_id"`
 	Prompt          string                   `json:"prompt"`
 	ReasoningEffort string                   `json:"reasoning_effort"`
+	ConnectionID    string                   `json:"connection_id"`
 }
 
 type SyncFromCRSRequest struct {
@@ -1518,7 +1519,7 @@ func (h *AccountHandler) PelicanTest(c *gin.Context) {
 		response.BadRequest(c, "Invalid pelican prompt mode")
 		return
 	}
-	if err := h.accountTestService.TestPelicanAccountConnection(c, accountID, req.ModelID, req.Prompt, req.ReasoningEffort); err != nil {
+	if err := h.accountTestService.TestPelicanAuthConnection(c, accountID, req.ModelID, req.Prompt, req.ReasoningEffort, req.ConnectionID); err != nil {
 		return
 	}
 }

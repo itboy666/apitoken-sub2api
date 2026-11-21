@@ -91,6 +91,10 @@ func prismBrowserResponsesURL(baseURL string) string {
 
 // Forward forwards request to OpenAI API
 func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (result *OpenAIForwardResult, resultErr error) {
+	if probe, explicit := adminConnectionProbeFromContext(ctx); explicit &&
+		(!probe.matchesRequest(ctx, account, gjson.GetBytes(body, "model").String()) || connectionCapabilityForRequest(c) != "responses") {
+		return nil, adminConnectionProbeUnavailable()
+	}
 	preparedCtx, preparedBody, prepareErr := s.prepareOpenAIAgentOAuthReplay(ctx, account, body)
 	if prepareErr != nil {
 		return nil, prepareErr
@@ -245,6 +249,9 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	}
 	if account.IsExcelBPSEnabledForModel(modelForBPS) && s.excelBPSGloballyEnabled(ctx) {
 		return s.forwardExcelBPS(withOpenAITransportMode(ctx, "bps"), c, account, body, startTime)
+	}
+	if _, explicit := adminConnectionProbeFromContext(ctx); explicit {
+		return nil, adminConnectionProbeUnavailable()
 	}
 	proxyCtx, releaseProxy, proxyErr := s.beginOpenAIRequestProxy(ctx, c, account)
 	if proxyErr != nil {

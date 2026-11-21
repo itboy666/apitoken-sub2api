@@ -22,6 +22,9 @@ func (s *OpenAIGatewayService) fenceAuthConnectionEgress(ctx context.Context, re
 	if err := s.excelOAuthReauth.ValidateAuthConnectionSend(ctx, a); err != nil {
 		return err
 	}
+	if err := s.fenceAdminConnectionProbeParent(ctx, a); err != nil {
+		return err
+	}
 	if req != nil {
 		req.Header.Del("Cookie")
 		req.Header.Del(openAICodexTurnStateHeader)
