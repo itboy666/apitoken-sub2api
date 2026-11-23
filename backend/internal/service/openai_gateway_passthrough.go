@@ -140,6 +140,20 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	ctx = withOpenAITransportMode(ctx, "passthrough")
 	requestedModel := reqModel
 	upstreamPassthroughModel := ""
+	// Gateway accounts retain explicit portable mappings even though their
+	// transport uses passthrough. Legacy passthrough keeps its original contract.
+	if account != nil && account.gatewayProtocolSource != nil {
+		mappedModel := account.GetMappedModel(reqModel)
+		if mappedModel != "" && mappedModel != reqModel {
+			nextBody, setErr := sjson.SetBytes(body, "model", mappedModel)
+			if setErr != nil {
+				return nil, fmt.Errorf("set gateway passthrough model: %w", setErr)
+			}
+			body = nextBody
+			upstreamPassthroughModel = mappedModel
+			attemptImageIntentInvalidated = true
+		}
+	}
 	if isOpenAIResponsesCompactPath(c) && !account.IsCopilotSDKEnabled() {
 		compactMappedModel := s.resolveOpenAICompactFallbackModel(account, reqModel)
 		if compactMappedModel != "" && compactMappedModel != reqModel {
@@ -698,7 +712,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	// DeepSeek / Kimi 原生 Responses 端点为无状态实现（见 normalizeDeepSeekResponsesRequestBody）。
 	body = normalizeDeepSeekResponsesRequestBody(account, body)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(withOAuth429WireBody(ctx, body), http.MethodPost, targetURL, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -741,6 +755,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 
 	// OAuth 透传到 ChatGPT internal API 时补齐必要头。
 	if account.UsesOpenAICodexProtocol() {
+		req = req.WithContext(WithOpenAICodexHTTPRequest(req.Context()))
 		// Current Codex OAuth HTTP no longer negotiates the legacy Responses
 		// experiment. Passthrough may receive it from an older client, so remove
 		// only that token while preserving any independent beta negotiation.
@@ -880,6 +895,9 @@ func stripOpenAILegacyResponsesBeta(headers http.Header) {
 }
 
 func shouldFailoverOpenAIPassthroughResponse(account *Account, statusCode int, responseBody []byte) bool {
+	if isOpenAIUpstreamSessionBlocked(responseBody) {
+		return false
+	}
 	if isSIWCEligibilityRejection(account, statusCode, responseBody) {
 		return false
 	}
@@ -898,6 +916,9 @@ func shouldFailoverOpenAIPassthroughResponse(account *Account, statusCode int, r
 	// A definite missing model cools only this account/model pair. Let the
 	// handler try another candidate before committing a passthrough 404.
 	if account != nil && account.IsOpenAICompatible() && isUpstreamModelNotFoundError(statusCode, responseBody) {
+		return true
+	}
+	if isOpenAIWrappedConcurrency401(account, statusCode, responseBody) || (usesOpenAIOAuthRetryAffinity(account) && isOpenAIOAuthTransientServerStatus(statusCode)) {
 		return true
 	}
 	if account != nil && account.IsPoolMode() && account.IsPoolModeRetryableStatus(statusCode) {
@@ -1037,7 +1058,7 @@ func (s *OpenAIGatewayService) handleFailoverErrorResponsePassthrough(
 		Detail:               upstreamDetail,
 		UpstreamResponseBody: upstreamDetail,
 	})
-	return s.newOpenAIAccountFailoverError(
+	return s.newOpenAIHTTPAccountFailoverError(
 		account,
 		resp.StatusCode,
 		resp.Header,
@@ -1061,6 +1082,9 @@ func (s *OpenAIGatewayService) handleErrorResponsePassthrough(
 	}
 	MarkResponseCommitted(c)
 	body := s.redactAgentIdentitySensitiveBody(ctx, account, responseBody)
+	if writeDeepSeekInputContentRejection(c, account, resp, body, writeChatCompletionsError) {
+		return fmt.Errorf("deepseek input content rejected")
+	}
 
 	// cyber_policy 仍按原始 body 打内部标记，供 handler 事后写风控/邮件；面向客户端的
 	// 错误体在下方统一重建。cyber 是上游网络安全策略拦截，不冷却账号，
@@ -1582,6 +1606,11 @@ func openAIStreamFailedEventSemanticStatus(payload []byte, message string) int {
 		}
 	}
 	switch {
+	// Bare errors can precede a successful terminal. Only a terminal refusal
+	// with a recognized provider code grants the new quota failover behavior.
+	case gjson.GetBytes(payload, "type").String() == "response.failed" &&
+		(code == "usage_limit_reached" || code == "insufficient_quota" || code == "quota_exceeded"):
+		return http.StatusTooManyRequests
 	case strings.Contains(combined, "rate_limit"):
 		return http.StatusTooManyRequests
 	case strings.Contains(errType, "invalid_request"):
@@ -2030,6 +2059,14 @@ func (s *OpenAIGatewayService) newOpenAIStreamFailoverErrorWithModel(
 		classificationHeaders = nil
 	}
 	failoverErr := s.newOpenAIAccountFailoverErrorWithClassificationHeaders(account, statusCode, headers, classificationHeaders, payload, message, shouldDisable, retryableOnSameAccount)
+	// A nil frame with this message is generated locally on a pre-output disconnect.
+	// Generic provider SSE errors also map to 502; that alone does not identify a disconnect.
+	if !shouldDisable && usesOpenAIOAuthRetryAffinity(account) && failoverErr.Scope == "" &&
+		((len(payload) == 0 && (strings.HasPrefix(message, "OpenAI stream disconnected before completion") ||
+			message == "OpenAI stream ended before a terminal event")) ||
+			(statusCode == http.StatusServiceUnavailable && failoverErr.RequestScopedTransient)) {
+		failoverErr.preserveOpenAIOAuthBinding()
+	}
 	failoverErr = failoverErr.WithGrokForbiddenPolicy(account)
 	if len(payload) > 0 && account != nil {
 		failoverErr.StreamFailedFrame = &OpenAIStreamFailedFrame{Platform: account.Platform, Payload: payload, Message: message}

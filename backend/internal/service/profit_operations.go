@@ -11,6 +11,17 @@ import (
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 )
 
+// Internal collection hint for bounded report caching; never accepted from HTTP.
+type profitCollectionKey struct{}
+
+func WithProfitRowCollection(ctx context.Context) context.Context {
+	return context.WithValue(ctx, profitCollectionKey{}, true)
+}
+func CollectProfitRows(ctx context.Context) bool {
+	value, _ := ctx.Value(profitCollectionKey{}).(bool)
+	return value
+}
+
 // ProfitWalletTodaySkew is how far the profit window's end may sit behind
 // "now" and still count as today's consumption snapshot. The today preset
 // sends the browser's current time, which is slightly earlier than the server.
@@ -20,6 +31,8 @@ const ProfitWalletTodaySkew = 5 * time.Minute
 // observed before a profit read skips another upstream probe for that same
 // [from, until). A manual refresh ignores it.
 const ProfitSpendFreshness = 2 * time.Minute
+
+var ErrAccountUsageBuilding = infraerrors.ServiceUnavailable("ACCOUNT_USAGE_BUILDING", "Account usage statistics are being aggregated")
 
 const profitOperationsQueryTimeout = 5 * time.Minute
 
@@ -58,6 +71,16 @@ func NormalizeProfitOperationsFilter(f *UpstreamOperationsFilter) error {
 			return ErrUpstreamOperationsValidation
 		}
 		f.ChannelID, f.Upstream = id, ""
+	}
+	if f.AccountUsage {
+		switch f.Sort {
+		case "estimated_cost":
+			f.Sort = "upstream_cost"
+		case "estimated_profit":
+			f.Sort = "gross_profit"
+		case "margin":
+			f.Sort = "gross_margin"
+		}
 	}
 	return ValidateProfitOperationsFilter(*f)
 }

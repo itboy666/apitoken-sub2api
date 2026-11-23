@@ -148,7 +148,7 @@ type CreateAccountRequest struct {
 	Name                    string         `json:"name" binding:"required"`
 	Notes                   *string        `json:"notes"`
 	Platform                string         `json:"platform" binding:"required"`
-	Type                    string         `json:"type" binding:"required,oneof=oauth setup-token apikey upstream bedrock service_account"`
+	Type                    string         `json:"type" binding:"required,oneof=oauth setup-token apikey upstream bedrock service_account gateway"`
 	Credentials             map[string]any `json:"credentials" binding:"required"`
 	Extra                   map[string]any `json:"extra"`
 	ProxyID                 *int64         `json:"proxy_id"`
@@ -170,7 +170,7 @@ type UpdateAccountRequest struct {
 	Platform            string         `json:"platform"`
 	Name                string         `json:"name"`
 	Notes               *string        `json:"notes"`
-	Type                string         `json:"type" binding:"omitempty,oneof=oauth setup-token apikey upstream bedrock service_account"`
+	Type                string         `json:"type" binding:"omitempty,oneof=oauth setup-token apikey upstream bedrock service_account gateway"`
 	Credentials         map[string]any `json:"credentials"`
 	Extra               map[string]any `json:"extra"`
 	ProxyID             *int64         `json:"proxy_id"`
@@ -1506,6 +1506,26 @@ func (h *AccountHandler) PelicanTest(c *gin.Context) {
 	var req PelicanTestRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if req.PromptMode == "ciallo" {
+		model := strings.TrimSpace(req.ModelID)
+		if model == "" || len(model) > 100 || accountID <= 0 {
+			response.BadRequest(c, "Invalid account or model")
+			return
+		}
+		switch req.ReasoningEffort {
+		case "", "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra":
+		default:
+			response.BadRequest(c, "Invalid reasoning effort")
+			return
+		}
+		result, err := h.accountTestService.RunCiallo(c.Request.Context(), accountID, model, req.ReasoningEffort)
+		if err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+		response.Success(c, result)
 		return
 	}
 	if req.PromptMode == service.PelicanPromptModeRandom {
@@ -3396,12 +3416,34 @@ func (h *AccountHandler) SyncUpstreamModelsPreview(c *gin.Context) {
 		Platform     string            `json:"platform" binding:"required"`
 		Type         string            `json:"type" binding:"required"`
 		BaseURL      string            `json:"base_url"`
-		APIKey       string            `json:"api_key" binding:"required"`
+		APIKey       string            `json:"api_key"`
+		AccountID    *int64            `json:"account_id" binding:"omitempty,gt=0"`
 		ProxyID      *int64            `json:"proxy_id" binding:"omitempty,gte=0"`
 		ModelMapping map[string]string `json:"model_mapping"`
+		UpstreamKind string            `json:"upstream_kind"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	// Gateway edits may preview a draft URL/proxy without returning the saved
+	// calling key to the browser. Resolve only an accessible gateway account.
+	if req.AccountID != nil {
+		if _, observer := service.ObserverGroupIDs(c.Request.Context()); observer {
+			response.ErrorFrom(c, service.ErrObserverScope)
+			return
+		}
+		account, err := h.adminService.GetAccount(c.Request.Context(), *req.AccountID)
+		if err != nil || account == nil || !account.IsGateway() || req.Platform != service.PlatformGateway || req.Type != service.AccountTypeGateway {
+			response.BadRequest(c, "Invalid gateway preview account")
+			return
+		}
+		if strings.TrimSpace(req.APIKey) == "" {
+			req.APIKey = account.GetCredential("api_key")
+		}
+	}
+	if strings.TrimSpace(req.APIKey) == "" {
+		response.BadRequest(c, "API key is required")
 		return
 	}
 	modelMapping := make(map[string]any, len(req.ModelMapping))
@@ -3413,6 +3455,7 @@ func (h *AccountHandler) SyncUpstreamModelsPreview(c *gin.Context) {
 		Platform: req.Platform,
 		Type:     req.Type,
 		Credentials: map[string]any{
+			"upstream_kind": req.UpstreamKind,
 			"api_key":       req.APIKey,
 			"base_url":      req.BaseURL,
 			"model_mapping": modelMapping,
