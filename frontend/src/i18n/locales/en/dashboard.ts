@@ -2,6 +2,7 @@ export default {
   dashboard: {
     title: 'Dashboard',
     welcomeMessage: "Welcome back! Here's an overview of your account.",
+    overviewHint: 'Monitor usage, keys, and account activity from one clear workspace.',
     balance: 'Balance',
     apiKeys: 'API Keys',
     todayRequests: 'Today Requests',

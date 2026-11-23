@@ -212,7 +212,7 @@
 
   /* ============ 玻璃效果 ============ */
   .glass {
-    @apply bg-white/80 backdrop-blur-xl dark:bg-dark-800/80;
+    @apply border border-white/70 bg-white/[0.78] backdrop-blur-xl dark:border-dark-700/70 dark:bg-dark-800/[0.78];
   }
 
   .glass-card {
@@ -226,11 +226,7 @@
 
   /* ============ 卡片样式 ============ */
   .card {
-    @apply bg-white dark:bg-dark-800/50;
-    @apply rounded-2xl;
-    @apply border border-gray-100 dark:border-dark-700/50;
-    @apply shadow-card;
-    @apply transition-all duration-300;
+    @apply rounded-[18px] border border-gray-200/70 bg-white/90 shadow-card backdrop-blur-xl transition-all duration-300 dark:border-dark-700/60 dark:bg-dark-800/[0.72];
   }
 
   .card-hover {
@@ -539,46 +535,54 @@
   /* ============ 侧边栏 ============ */
   .sidebar {
     @apply fixed inset-y-0 left-0 z-40;
-    @apply w-64 bg-white dark:bg-dark-900;
-    @apply border-r border-gray-200 dark:border-dark-800;
+    @apply w-64 border-r border-gray-200/80 bg-white/[0.92] shadow-[8px_0_30px_rgba(15,23,42,0.035)] backdrop-blur-2xl dark:border-dark-800/90 dark:bg-dark-900/[0.92] dark:shadow-[8px_0_30px_rgba(2,6,23,0.14)];
     @apply flex flex-col;
     @apply transition-transform duration-300;
     transition-property: width, transform;
   }
 
   .sidebar-header {
-    @apply h-16 px-6;
+    @apply h-16 border-b border-gray-200/70 px-5 dark:border-dark-800/80;
     @apply flex items-center gap-3;
-    @apply border-b border-gray-100 dark:border-dark-800;
     transition:
       padding 0.2s ease,
       gap 0.2s ease;
   }
 
   .sidebar-nav {
-    @apply flex-1 overflow-y-auto px-3 py-4;
+    @apply flex-1 overflow-y-auto px-3 py-5;
   }
 
   .sidebar-link {
-    @apply flex items-center gap-3 rounded-xl py-2.5;
+    @apply flex items-center gap-3 rounded-[13px] py-2.5;
     @apply overflow-hidden;
     @apply text-sm font-medium;
-    @apply text-gray-600 dark:text-dark-300;
-    @apply transition-all duration-200;
-    @apply hover:bg-gray-100 dark:hover:bg-dark-800;
+    @apply text-gray-600 transition-all duration-200 dark:text-dark-300;
+    @apply hover:bg-gray-100/80 dark:hover:bg-dark-800/80;
     @apply hover:text-gray-900 dark:hover:text-white;
     padding-left: 1.0625rem;
     padding-right: 0.875rem;
   }
 
   .sidebar-link-active {
-    @apply bg-primary-50 dark:bg-primary-900/20;
-    @apply text-primary-600 dark:text-primary-400;
-    @apply hover:bg-primary-100 dark:hover:bg-primary-900/30;
+    @apply bg-primary-50/90 text-primary-700 shadow-[inset_0_0_0_1px_rgba(20,184,166,0.12)] dark:bg-primary-900/25 dark:text-primary-300;
+    @apply hover:bg-primary-100/80 dark:hover:bg-primary-900/35;
+  }
+
+  .sidebar-link-active::before {
+    position: absolute;
+    top: 50%;
+    left: 0.35rem;
+    width: 3px;
+    height: 1.25rem;
+    border-radius: 999px;
+    background: theme('colors.primary.500');
+    content: '';
+    transform: translateY(-50%);
   }
 
   .sidebar-section {
-    @apply mb-6;
+    @apply mb-7;
   }
 
   .sidebar-section-title {
