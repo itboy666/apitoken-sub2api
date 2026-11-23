@@ -1,8 +1,8 @@
 <template>
   <!-- Row 1: Core Stats -->
-  <div class="grid grid-cols-2 gap-5 lg:grid-cols-4">
+  <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
     <!-- Balance -->
-    <div v-if="!isSimple" class="card dashboard-card p-5">
+    <div v-if="!isSimple" class="card p-4">
       <div class="flex items-center gap-3">
         <div class="rounded-lg bg-emerald-100 p-2 dark:bg-emerald-900/30">
           <svg class="h-5 w-5 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -18,7 +18,7 @@
     </div>
 
     <!-- API Keys -->
-    <div class="card dashboard-card p-5">
+    <div class="card p-4">
       <div class="flex items-center gap-3">
         <div class="rounded-lg bg-blue-100 p-2 dark:bg-blue-900/30">
           <Icon name="key" size="md" class="text-blue-600 dark:text-blue-400" :stroke-width="2" />
@@ -32,7 +32,7 @@
     </div>
 
     <!-- Today Requests -->
-    <div class="card dashboard-card p-5">
+    <div class="card p-4">
       <div class="flex items-center gap-3">
         <div class="rounded-lg bg-green-100 p-2 dark:bg-green-900/30">
           <Icon name="chart" size="md" class="text-green-600 dark:text-green-400" :stroke-width="2" />
@@ -46,7 +46,7 @@
     </div>
 
     <!-- Today Cost -->
-    <div class="card dashboard-card p-5">
+    <div class="card p-4">
       <div class="flex items-center gap-3">
         <div class="rounded-lg bg-purple-100 p-2 dark:bg-purple-900/30">
           <Icon name="dollar" size="md" class="text-purple-600 dark:text-purple-400" :stroke-width="2" />
@@ -68,9 +68,9 @@
   </div>
 
   <!-- Row 2: Token Stats -->
-  <div class="grid grid-cols-2 gap-5 lg:grid-cols-4">
+  <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
     <!-- Today Tokens -->
-    <div class="card dashboard-card p-5">
+    <div class="card p-4">
       <div class="flex items-center gap-3">
         <div class="rounded-lg bg-amber-100 p-2 dark:bg-amber-900/30">
           <Icon name="cube" size="md" class="text-amber-600 dark:text-amber-400" :stroke-width="2" />
@@ -84,7 +84,7 @@
     </div>
 
     <!-- Total Tokens -->
-    <div class="card dashboard-card p-5">
+    <div class="card p-4">
       <div class="flex items-center gap-3">
         <div class="rounded-lg bg-indigo-100 p-2 dark:bg-indigo-900/30">
           <Icon name="database" size="md" class="text-indigo-600 dark:text-indigo-400" :stroke-width="2" />
@@ -98,7 +98,7 @@
     </div>
 
     <!-- Performance (RPM/TPM) -->
-    <div class="card dashboard-card p-5">
+    <div class="card p-4">
       <div class="flex items-center gap-3">
         <div class="rounded-lg bg-violet-100 p-2 dark:bg-violet-900/30">
           <Icon name="bolt" size="md" class="text-violet-600 dark:text-violet-400" :stroke-width="2" />
@@ -118,7 +118,7 @@
     </div>
 
     <!-- Avg Response Time -->
-    <div class="card dashboard-card p-5">
+    <div class="card p-4">
       <div class="flex items-center gap-3">
         <div class="rounded-lg bg-rose-100 p-2 dark:bg-rose-900/30">
           <Icon name="clock" size="md" class="text-rose-600 dark:text-rose-400" :stroke-width="2" />
@@ -133,7 +133,7 @@
   </div>
 
   <!-- Row 3: Per-platform breakdown -->
-  <div v-if="!isSimple && platformCards.length > 0" class="card dashboard-card p-5">
+  <div v-if="!isSimple && platformCards.length > 0" class="card p-4">
     <div class="mb-3 flex items-center justify-between">
       <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('dashboard.platformBreakdown') }}</h3>
       <span class="text-xs text-gray-500 dark:text-gray-400">
@@ -147,7 +147,7 @@
         data-testid="platform-card"
         :data-platform="item.platform"
         :class="[
-          'rounded-xl border p-4 transition-colors',
+          'rounded-lg border p-3',
           item.isOther
             ? 'border-dashed border-gray-300 bg-gray-50 dark:border-dark-500 dark:bg-dark-700/30'
             : 'border-gray-200 dark:border-dark-600'
@@ -400,40 +400,3 @@ const formatTokens = (t: number) => {
 }
 const formatDuration = (ms: number) => ms >= 1000 ? `${(ms / 1000).toFixed(2)}s` : `${ms.toFixed(0)}ms`
 </script>
-
-<style scoped>
-.dashboard-card {
-  border-color: color-mix(in srgb, rgb(148 163 184) 26%, transparent);
-  background: color-mix(in srgb, white 86%, transparent);
-  box-shadow: 0 10px 28px rgb(15 23 42 / 0.045);
-  backdrop-filter: blur(14px);
-  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
-}
-
-.dashboard-card:hover {
-  border-color: color-mix(in srgb, rgb(16 185 129) 32%, transparent);
-  box-shadow: 0 16px 36px rgb(15 23 42 / 0.08);
-  transform: translateY(-1px);
-}
-
-:global(.dark) .dashboard-card {
-  border-color: rgb(71 85 105 / 0.55);
-  background: rgb(30 41 59 / 0.72);
-  box-shadow: 0 10px 28px rgb(2 6 23 / 0.18);
-}
-
-:global(.dark) .dashboard-card:hover {
-  border-color: rgb(52 211 153 / 0.34);
-  box-shadow: 0 16px 36px rgb(2 6 23 / 0.28);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .dashboard-card {
-    transition: none;
-  }
-
-  .dashboard-card:hover {
-    transform: none;
-  }
-}
-</style>

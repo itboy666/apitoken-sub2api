@@ -2,7 +2,6 @@ export default {
   dashboard: {
     title: '仪表盘',
     welcomeMessage: '欢迎回来！这是您账户的概览。',
-    overviewHint: '在一个清晰的工作台中查看用量、密钥与账户动态。',
     balance: '余额',
     apiKeys: 'API 密钥',
     todayRequests: '今日请求',

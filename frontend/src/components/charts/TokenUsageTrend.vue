@@ -1,7 +1,6 @@
 <template>
-  <div class="card card-hover p-5">
-    <h3 class="mb-5 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
-      <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+  <div class="card p-4">
+    <h3 class="mb-4 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
       {{ t('admin.dashboard.tokenUsageTrend') }}
       <NewFeatureBadge
         v-if="showRate && noticeUserId != null"

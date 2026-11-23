@@ -1,17 +1,17 @@
 <template>
-  <div class="space-y-5">
+  <div class="space-y-6">
     <!-- Date Range Filter -->
-    <div class="card card-hover p-5">
-      <div class="flex flex-wrap items-center gap-3">
-        <div class="flex min-h-10 items-center gap-2 rounded-xl bg-gray-50 px-3 dark:bg-dark-900/50">
-          <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ t('dashboard.timeRange') }}</span>
+    <div class="card p-4">
+      <div class="flex flex-wrap items-center gap-4">
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('dashboard.timeRange') }}:</span>
           <DateRangePicker :start-date="startDate" :end-date="endDate" @update:startDate="$emit('update:startDate', $event)" @update:endDate="$emit('update:endDate', $event)" @change="$emit('dateRangeChange', $event)" />
         </div>
-        <button @click="$emit('refresh')" :disabled="loading" class="btn btn-secondary min-h-10">
+        <button @click="$emit('refresh')" :disabled="loading" class="btn btn-secondary">
           {{ t('common.refresh') }}
         </button>
-        <div class="ml-auto flex min-h-10 items-center gap-2 rounded-xl bg-gray-50 px-3 dark:bg-dark-900/50">
-          <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ t('dashboard.granularity') }}</span>
+        <div class="ml-auto flex items-center gap-2">
+          <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('dashboard.granularity') }}:</span>
           <div class="w-28">
             <Select :model-value="granularity" :options="[{value:'day', label:t('dashboard.day')}, {value:'hour', label:t('dashboard.hour')}]" @update:model-value="$emit('update:granularity', $event)" @change="$emit('granularityChange')" />
           </div>
@@ -22,14 +22,11 @@
     <!-- Charts Grid -->
     <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
       <!-- Model Distribution Chart -->
-      <div class="card card-hover relative overflow-hidden p-5">
+      <div class="card relative overflow-hidden p-4">
         <div v-if="loading" class="absolute inset-0 z-10 flex items-center justify-center bg-white/50 backdrop-blur-sm dark:bg-dark-800/50">
           <LoadingSpinner size="md" />
         </div>
-        <h3 class="mb-5 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
-          <span class="h-2 w-2 rounded-full bg-primary-500"></span>
-          {{ t('dashboard.modelDistribution') }}
-        </h3>
+        <h3 class="mb-4 text-sm font-semibold text-gray-900 dark:text-white">{{ t('dashboard.modelDistribution') }}</h3>
         <div class="flex flex-col items-center gap-4 sm:flex-row sm:gap-6">
           <div class="h-48 w-48 shrink-0">
             <Doughnut v-if="modelData" :data="modelData" :options="doughnutOptions" />

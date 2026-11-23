@@ -1,6 +1,6 @@
 <template>
-  <header class="app-header glass sticky top-0 z-30">
-    <div class="app-header-inner flex h-16 items-center justify-between gap-2 px-2 sm:px-4 md:px-6">
+  <header class="glass sticky top-0 z-30 border-b border-gray-200/50 dark:border-dark-700/50">
+    <div class="flex h-16 items-center justify-between gap-2 px-2 sm:px-4 md:px-6">
       <!-- Left: Mobile Menu Toggle + Page Title -->
       <div class="flex min-w-0 items-center gap-2 sm:gap-4">
         <button
@@ -11,18 +11,18 @@
           <Icon name="menu" size="md" />
         </button>
 
-        <div class="header-context hidden min-w-0 lg:block">
-          <h1 class="truncate text-[15px] font-semibold tracking-[-0.01em] text-gray-950 dark:text-white">
+        <div class="hidden min-w-0 lg:block">
+          <h1 class="truncate text-lg font-semibold text-gray-900 dark:text-white">
             {{ pageTitle }}
           </h1>
-          <p v-if="pageDescription" class="mt-0.5 truncate text-[11px] text-gray-500 dark:text-dark-400" :title="pageDescription">
+          <p v-if="pageDescription" class="truncate text-xs text-gray-500 dark:text-dark-400" :title="pageDescription">
             {{ pageDescription }}
           </p>
         </div>
       </div>
 
       <!-- Right: Announcements + Docs + Language + Subscriptions + Balance + User Dropdown -->
-      <div class="header-actions flex shrink-0 items-center gap-1 sm:gap-2.5">
+      <div class="flex shrink-0 items-center gap-1 sm:gap-3">
         <!-- Announcement Bell -->
         <AnnouncementBell v-if="user" />
 
@@ -32,7 +32,7 @@
           :href="docUrl"
           target="_blank"
           rel="noopener noreferrer"
-          class="header-action hidden items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-dark-400 dark:hover:bg-dark-800 dark:hover:text-white sm:flex"
+          class="hidden items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-dark-400 dark:hover:bg-dark-800 dark:hover:text-white sm:flex"
         >
           <Icon name="book" size="sm" />
           <span class="hidden sm:inline">{{ t('nav.docs') }}</span>
@@ -44,7 +44,7 @@
           :to="{ path: '/model-plaza', query: { embedded: '1' } }"
           :title="t('nav.modelPlaza')"
           :aria-label="t('nav.modelPlaza')"
-          class="header-action flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-dark-400 dark:hover:bg-dark-800 dark:hover:text-white"
+          class="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-dark-400 dark:hover:bg-dark-800 dark:hover:text-white"
         >
           <Icon name="grid" size="sm" />
           <span class="hidden sm:inline">{{ t('nav.modelPlaza') }}</span>
@@ -59,7 +59,7 @@
         <!-- Balance Display -->
         <div
           v-if="user"
-          class="header-balance group relative hidden items-center gap-2 rounded-xl px-3 py-1.5 sm:flex"
+          class="group relative hidden items-center gap-2 rounded-xl bg-primary-50 px-3 py-1.5 dark:bg-primary-900/20 sm:flex"
         >
           <svg
             class="h-4 w-4 text-primary-600 dark:text-primary-400"
@@ -107,7 +107,7 @@
         <div v-if="user" class="relative" ref="dropdownRef">
           <button
             @click="toggleDropdown"
-            class="header-user flex items-center gap-2 rounded-xl p-1.5 transition-colors hover:bg-gray-100 dark:hover:bg-dark-800"
+            class="flex items-center gap-2 rounded-xl p-1.5 transition-colors hover:bg-gray-100 dark:hover:bg-dark-800"
             :aria-label="t('common.userMenu')"
           >
             <div class="flex h-8 w-8 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 text-sm font-medium text-white shadow-sm">
@@ -416,77 +416,6 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.app-header {
-  border-bottom: 1px solid rgb(226 232 240 / 0.72);
-  background: rgb(255 255 255 / 0.78);
-  box-shadow: 0 1px 0 rgb(15 23 42 / 0.02), 0 8px 24px rgb(15 23 42 / 0.035);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-}
-
-.app-header-inner {
-  max-width: 1600px;
-  margin: 0 auto;
-}
-
-.header-context {
-  position: relative;
-  padding-left: 14px;
-}
-
-.header-context::before {
-  position: absolute;
-  top: 0.15rem;
-  bottom: 0.15rem;
-  left: 0;
-  width: 3px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, rgb(20 184 166), rgb(13 148 136));
-  content: '';
-}
-
-.header-action,
-.header-user {
-  min-height: 40px;
-}
-
-.header-balance {
-  border: 1px solid rgb(20 184 166 / 0.14);
-  background: linear-gradient(135deg, rgb(240 253 250 / 0.92), rgb(236 253 245 / 0.7));
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.78);
-}
-
-.header-user {
-  border: 1px solid transparent;
-}
-
-.header-user:hover {
-  border-color: rgb(226 232 240);
-}
-
-:global(.dark) .app-header {
-  border-color: rgb(51 65 85 / 0.72);
-  background: rgb(15 23 42 / 0.78);
-  box-shadow: 0 1px 0 rgb(255 255 255 / 0.025), 0 8px 24px rgb(2 6 23 / 0.18);
-}
-
-:global(.dark) .header-balance {
-  border-color: rgb(45 212 191 / 0.18);
-  background: linear-gradient(135deg, rgb(19 78 74 / 0.48), rgb(15 118 110 / 0.18));
-}
-
-:global(.dark) .header-user:hover {
-  border-color: rgb(51 65 85);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .app-header,
-  .header-action,
-  .header-user {
-    transition: none;
-  }
-}
-
 .dropdown-enter-active,
 .dropdown-leave-active {
   transition: all 0.2s ease;
